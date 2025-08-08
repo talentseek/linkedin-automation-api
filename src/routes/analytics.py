@@ -5,7 +5,7 @@ from collections import defaultdict, OrderedDict
 from flask import Blueprint, jsonify, request, current_app
 from flask_jwt_extended import jwt_required
 
-from src.models import db, Campaign, Lead, Event
+from src.models import db, Campaign, Lead, Event, LinkedInAccount
 from src.models.rate_usage import RateUsage
 
 
@@ -98,6 +98,67 @@ def campaign_summary(campaign_id: str):
         tfr_avg = mean(tfr_days) if tfr_days else 0.0
         tfr_median = median(tfr_days) if tfr_days else 0.0
 
+        # Reply distribution by step (which message elicited the reply)
+        reply_distribution = OrderedDict()
+        try:
+            # Initialize for first three steps
+            for k in ("step_1", "step_2", "step_3", "unknown"):
+                reply_distribution[k] = 0
+            for lead_id, evs in by_lead_events.items():
+                msgs = sorted([e for e in evs if e.event_type == "message_sent"], key=lambda e: e.timestamp)
+                reps = sorted([e for e in evs if e.event_type == "message_received"], key=lambda e: e.timestamp)
+                if not reps:
+                    continue
+                first_reply_ts = reps[0].timestamp
+                # Count messages sent before first reply
+                index = 0
+                for m in msgs:
+                    if m.timestamp and m.timestamp <= first_reply_ts:
+                        index += 1
+                # index is number of messages sent up to and including first reply time
+                if index == 0:
+                    reply_distribution["unknown"] += 1
+                elif index == 1:
+                    reply_distribution["step_1"] += 1
+                elif index == 2:
+                    reply_distribution["step_2"] += 1
+                elif index >= 3:
+                    reply_distribution["step_3"] += 1
+        except Exception:
+            pass
+
+        # Per-account reply rates over the period
+        per_account = OrderedDict()
+        try:
+            # Map provider account_id -> LinkedInAccount.id
+            acct_map = {}
+            for acct in LinkedInAccount.query.all():
+                if acct.account_id:
+                    acct_map[acct.account_id] = acct.id
+            msg_counts = defaultdict(int)
+            rep_counts = defaultdict(int)
+            for ev in recent_events:
+                if ev.event_type == "message_sent":
+                    acct_id = (ev.meta_json or {}).get("linkedin_account_id")
+                    if acct_id:
+                        msg_counts[acct_id] += 1
+                elif ev.event_type == "message_received":
+                    prov_acct = (ev.meta_json or {}).get("account_id")
+                    acct_id = acct_map.get(prov_acct)
+                    if acct_id:
+                        rep_counts[acct_id] += 1
+            acct_keys = sorted(set(list(msg_counts.keys()) + list(rep_counts.keys())))
+            for aid in acct_keys:
+                m = msg_counts.get(aid, 0)
+                r = rep_counts.get(aid, 0)
+                per_account[aid] = {
+                    "messages": m,
+                    "replies": r,
+                    "reply_rate": (r / m) if m else 0.0,
+                }
+        except Exception:
+            pass
+
         return jsonify(
             {
                 "campaign_id": campaign.id,
@@ -114,6 +175,8 @@ def campaign_summary(campaign_id: str):
                 "reply_rate_last_n_days": reply_rate_period,
                 "time_to_first_reply_days_avg": tfr_avg,
                 "time_to_first_reply_days_median": tfr_median,
+                "reply_distribution_by_step": reply_distribution,
+                "per_account_reply_rates": per_account,
             }
         ), 200
     except Exception as e:

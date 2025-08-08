@@ -1,0 +1,37 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Virtual environments
+venv/
+.env
+.env.*
+
+# OS files
+.DS_Store
+
+# Logs
+logs/
+*.log
+
+# Flask/instance data
+instance/
+
+# Local databases
+src/database/
+*.sqlite3
+*.db
+
+# Coverage / test
+.pytest_cache/
+.coverage*
+coverage.xml
+htmlcov/
+
+# Editor
+.vscode/
+.idea/
+*.iml
+

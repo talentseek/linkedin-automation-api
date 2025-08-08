@@ -442,6 +442,7 @@ def get_status():
 
 
 @webhook_bp.route('/debug/leads', methods=['GET'])
+@jwt_required()
 def debug_leads():
     """Debug endpoint to show detailed lead information."""
     try:
@@ -491,6 +492,7 @@ def debug_leads():
 
 
 @webhook_bp.route('/debug/accounts', methods=['GET'])
+@jwt_required()
 def debug_accounts():
     """Debug endpoint to show LinkedIn accounts in the database."""
     try:
@@ -972,6 +974,7 @@ def sync_historical_connections():
 
 
 @webhook_bp.route('/debug-relations', methods=['POST'])
+@jwt_required()
 def debug_relations():
     """Debug endpoint to see the structure of relations data."""
     try:
@@ -1006,6 +1009,7 @@ def debug_relations():
 
 
 @webhook_bp.route('/debug/campaigns', methods=['GET'])
+@jwt_required()
 def debug_campaigns():
     """Debug endpoint to see all campaigns and their lead counts."""
     try:
@@ -1156,6 +1160,7 @@ def scheduler_status():
 
 
 @webhook_bp.route('/debug-timing', methods=['GET'])
+@jwt_required()
 def debug_timing():
     """Debug endpoint to test timing calculations for connected leads."""
     try:
@@ -1371,6 +1376,7 @@ def resolve_conversation_ids():
         return jsonify({'error': str(e)}), 500
 
 @webhook_bp.route('/debug/send-chat', methods=['POST'])
+@jwt_required()
 def debug_send_chat():
     """Debug: send a message to a lead using Unipile chats API with robust fallbacks.
 

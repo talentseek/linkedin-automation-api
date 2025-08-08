@@ -789,7 +789,8 @@ Note:
 - Scheduler status semantics (thread-based):
   - `/api/webhooks/scheduler-status` (no auth) exposes `scheduler_running` and `scheduler_thread_alive` from `running` and `thread.is_alive()`.
   - `/api/automation/scheduler/status` (JWT) returns `{ status, running, thread_alive }`.
-- Webhook authentication: Unipile webhooks do not require a secret by default. If you want to verify requests, set `UNIPILE_WEBHOOK_SECRET` in the app and add a matching `Unipile-Auth` header to the webhook in Unipile. If not set, verification is skipped.
+- Webhook authentication: If `UNIPILE_WEBHOOK_SECRET` is set, incoming `users` and `messaging` webhooks must include a valid `X-Unipile-Signature` and will be rejected on invalid signatures.
+- Idempotency: `message_received` events are deduplicated by provider `message_id` to avoid double processing.
 
 ### Analytics Endpoints
 
@@ -857,6 +858,20 @@ Optional JSON body:
 ```
 
 #### POST /webhooks/debug/send-chat
+### Admin Endpoints (JWT)
+
+#### GET /api/admin/migrations/status
+Returns schema status (presence of `leads.conversation_id` and `rate_usage`).
+
+#### POST /api/admin/migrations/bootstrap
+Idempotently ensures critical schema exists in production (adds `leads.conversation_id`, creates `rate_usage` with indexes) without requiring Alembic.
+
+#### POST /api/admin/backfill/conversations
+Runs the conversation ID backfill immediately (one-off).
+
+#### POST /api/admin/backfill/rate-usage
+Runs the rate usage backfill (for yesterday UTC) immediately (one-off).
+
 Debug utility to send to a single lead via Unipile Chats API. Resolves LinkedIn member_id, locates an existing chat or starts a new 1:1 chat, then sends the message. Returns raw provider response and method used.
 
 ## Data Models

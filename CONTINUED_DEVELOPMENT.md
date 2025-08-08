@@ -107,7 +107,8 @@ Notes:
 
 ## 6) Backlog (Prioritized)
 
-1. Secure/gate debug endpoints in production (config flag or JWT).
+1. Secure/gate debug endpoints in production (config flag or JWT). [DONE]
+   - All debug routes now require JWT; removed reliance on DEBUG_ENDPOINTS_ENABLED for access control.
    - Enforce webhook signature when `UNIPILE_WEBHOOK_SECRET` is set (users & messaging).
    - Idempotency: ignore duplicate `message_received` by provider `message_id`.
 2. Introduce DB migrations (Alembic/Flask-Migrate) and create migration for `conversation_id` (if missing).

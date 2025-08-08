@@ -578,6 +578,7 @@ def reset_leads():
 
 
 @webhook_bp.route('/register', methods=['POST'])
+@jwt_required()
 def register_webhook():
     """Register a webhook with Unipile for monitoring LinkedIn connections or messaging.
 
@@ -631,6 +632,7 @@ def register_webhook():
         return jsonify({'error': str(e)}), 500
 
 @webhook_bp.route('/list', methods=['GET'])
+@jwt_required()
 def list_webhooks():
     """List all webhooks registered with Unipile."""
     try:
@@ -652,6 +654,7 @@ def list_webhooks():
         return jsonify({'error': str(e)}), 500
 
 @webhook_bp.route('/delete/<webhook_id>', methods=['DELETE'])
+@jwt_required()
 def delete_webhook(webhook_id):
     """Delete a webhook from Unipile."""
     try:
@@ -676,6 +679,7 @@ def delete_webhook(webhook_id):
 
 
 @webhook_bp.route('/webhooks/fix-messaging', methods=['POST'])
+@jwt_required()
 def fix_messaging_webhook():
     """Ensure a single correctly configured messaging webhook exists.
 

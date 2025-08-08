@@ -209,6 +209,7 @@ Notes:
 1) Webhooks hygiene
 - [DONE] Added `POST /api/webhooks/webhooks/fix-messaging` to auto-delete misconfigured messaging webhooks and create one pointing to `/api/webhooks/unipile/messaging` with standard events.
 - [DONE] Executed in production; old ID removed and new created.
+- [DONE] JWT-protected admin endpoints: `/api/webhooks/register`, `/api/webhooks/list`, `/api/webhooks/delete/{id}`, `/api/webhooks/webhooks/fix-messaging` now require JWT.
 - Keep `users` webhook on `/api/webhooks/unipile/users`.
 - Ensure both are configured with `Content-Type: application/json` and optional secret header.
 

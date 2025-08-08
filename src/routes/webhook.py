@@ -3,6 +3,7 @@ import hmac
 import json
 import logging
 from flask import Blueprint, request, jsonify, current_app
+from flask_jwt_extended import jwt_required
 from src.models import db, Lead, LinkedInAccount, Event
 from src.services.scheduler import get_outreach_scheduler
 from datetime import datetime
@@ -1278,6 +1279,72 @@ def get_conversation_ids():
         logger.error(f"Error in get_conversation_ids: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
+
+@webhook_bp.route('/resolve-conversation-ids', methods=['POST'])
+@jwt_required()
+def resolve_conversation_ids():
+    """Resolve and persist conversation IDs for leads without requiring debug flag.
+
+    Body JSON (optional):
+      - campaign_id: UUID to scope leads
+      - linkedin_account_id: UUID of LinkedInAccount to use for chats lookup
+    """
+    try:
+        from src.models import Lead, LinkedInAccount, Campaign
+        from src.services.unipile_client import UnipileClient
+
+        payload = request.get_json(silent=True) or {}
+        campaign_id = payload.get('campaign_id')
+        linkedin_account_id = payload.get('linkedin_account_id')
+
+        # Determine lead scope
+        lead_query = Lead.query
+        if campaign_id:
+            lead_query = lead_query.filter(Lead.campaign_id == campaign_id)
+        # Focus on leads that could have conversations but missing one
+        eligible_statuses = ['connected', 'messaged', 'responded']
+        lead_query = lead_query.filter(Lead.status.in_(eligible_statuses))
+        lead_query = lead_query.filter((Lead.conversation_id.is_(None)) | (Lead.conversation_id == ''))
+        leads = lead_query.all()
+
+        if not leads:
+            return jsonify({'message': 'No eligible leads without conversation_id found'}), 200
+
+        # Choose LinkedIn account
+        if linkedin_account_id:
+            linkedin_account = LinkedInAccount.query.get(linkedin_account_id)
+        else:
+            # If campaign provided, prefer an account for that campaign's client
+            if campaign_id:
+                camp = Campaign.query.get(campaign_id)
+                linkedin_account = LinkedInAccount.query.filter_by(client_id=camp.client_id, status='connected').first() if camp else None
+            else:
+                linkedin_account = LinkedInAccount.query.filter_by(status='connected').first()
+
+        if not linkedin_account:
+            return jsonify({'error': 'No connected LinkedIn account available'}), 404
+
+        unipile = UnipileClient()
+        updated = 0
+        results = []
+        for lead in leads:
+            try:
+                chat_id = unipile.find_conversation_with_provider(linkedin_account.account_id, lead.provider_id)
+                if chat_id:
+                    lead.conversation_id = chat_id
+                    updated += 1
+                    results.append({'lead_id': lead.id, 'public_identifier': lead.public_identifier, 'conversation_id': chat_id, 'status': 'found'})
+                else:
+                    results.append({'lead_id': lead.id, 'public_identifier': lead.public_identifier, 'conversation_id': None, 'status': 'not_found'})
+            except Exception as e:
+                results.append({'lead_id': lead.id, 'public_identifier': lead.public_identifier, 'conversation_id': None, 'status': 'error', 'error': str(e)})
+
+        db.session.commit()
+        return jsonify({'message': f'Processed {len(leads)} leads', 'updated': updated, 'results': results}), 200
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error in resolve_conversation_ids: {str(e)}")
+        return jsonify({'error': str(e)}), 500
 
 @webhook_bp.route('/debug/send-chat', methods=['POST'])
 def debug_send_chat():

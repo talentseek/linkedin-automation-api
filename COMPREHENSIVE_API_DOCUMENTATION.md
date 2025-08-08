@@ -845,6 +845,17 @@ Behavior:
 #### POST /webhooks/get-conversation-ids
 Attempts to resolve and persist chat ids for connected leads by scanning Unipile chats.
 
+#### POST /webhooks/resolve-conversation-ids (JWT)
+Resolve and persist chat ids for eligible leads (connected/messaged/responded) without requiring debug flag.
+
+Optional JSON body:
+```json
+{
+  "campaign_id": "<uuid>",
+  "linkedin_account_id": "<uuid>"
+}
+```
+
 #### POST /webhooks/debug/send-chat
 Debug utility to send to a single lead via Unipile Chats API. Resolves LinkedIn member_id, locates an existing chat or starts a new 1:1 chat, then sends the message. Returns raw provider response and method used.
 

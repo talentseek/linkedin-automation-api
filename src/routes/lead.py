@@ -51,6 +51,33 @@ def create_lead(campaign_id):
         return jsonify({'error': str(e)}), 500
 
 
+@lead_bp.route('/campaigns/<campaign_id>/leads', methods=['GET'])
+@jwt_required()
+def list_leads(campaign_id):
+    """List leads for a campaign (diagnostics: includes public_identifier/provider_id/status)."""
+    try:
+        campaign = Campaign.query.get(campaign_id)
+        if not campaign:
+            return jsonify({'error': 'Campaign not found'}), 404
+        leads = Lead.query.filter_by(campaign_id=campaign_id).all()
+        def to_minimal_dict(lead: Lead):
+            return {
+                'id': lead.id,
+                'first_name': lead.first_name,
+                'last_name': lead.last_name,
+                'company_name': lead.company_name,
+                'public_identifier': lead.public_identifier,
+                'provider_id': lead.provider_id,
+                'status': lead.status,
+                'conversation_id': lead.conversation_id,
+                'current_step': lead.current_step,
+                'last_step_sent_at': lead.last_step_sent_at.isoformat() if lead.last_step_sent_at else None,
+            }
+        return jsonify({'campaign_id': campaign_id, 'total': len(leads), 'leads': [to_minimal_dict(l) for l in leads]}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 @lead_bp.route('/campaigns/<campaign_id>/leads/import', methods=['POST'])
 @jwt_required()
 def import_leads_from_search(campaign_id):

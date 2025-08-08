@@ -77,10 +77,17 @@ def create_app(config_name=None):
         except Exception as e:
             app.logger.error(f"Failed to start scheduler: {str(e)}")
     
-    # Create database tables
-    with app.app_context():
-        db.create_all()
-        app.logger.info("Database tables created/verified")
+    # Create database tables (avoid fatal boot failures in production)
+    try:
+        with app.app_context():
+            # In production, only run if explicitly enabled
+            if config_name != 'production' or os.environ.get('STARTUP_DB_CREATE_ALL', 'false').lower() == 'true':
+                db.create_all()
+                app.logger.info("Database tables created/verified")
+            else:
+                app.logger.info("Skipping db.create_all() on startup in production")
+    except Exception as e:
+        app.logger.error(f"Failed to create/verify database tables on startup: {str(e)}")
     
     # Configure logging
     if not app.debug:

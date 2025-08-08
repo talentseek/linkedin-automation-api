@@ -321,18 +321,23 @@ class UnipileClient:
         endpoint = f"/api/v1/webhooks/{webhook_id}"
         return self._make_request("DELETE", endpoint)
 
-    def get_relations(self, account_id):
+    def get_relations(self, account_id, cursor=None, limit=None):
         """
-        Get all relations (connections) for a LinkedIn account.
+        Get relations (connections) for a LinkedIn account (paginated).
         
         Args:
             account_id: The LinkedIn account ID
-            
+            cursor: Optional pagination cursor
+            limit: Optional page size (1..1000)
         Returns:
-            dict: List of relations/connections
+            dict: { items: [...], cursor: "..." }
         """
         endpoint = "/api/v1/users/relations"
         params = {'account_id': account_id}
+        if cursor:
+            params['cursor'] = cursor
+        if limit:
+            params['limit'] = limit
         return self._make_request("GET", endpoint, params=params)
 
     def get_sent_invitations(self, account_id):

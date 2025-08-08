@@ -708,7 +708,7 @@ def sync_historical_connections():
             relations = []
             cursor = None
             while True:
-                relations_response = unipile.get_relations(linkedin_account.account_id) if not cursor else unipile.get_relations(linkedin_account.account_id + f"?cursor={cursor}")
+                relations_response = unipile.get_relations(linkedin_account.account_id, cursor=cursor, limit=1000)
                 items = relations_response.get('items', [])
                 relations.extend(items)
                 cursor = relations_response.get('cursor')

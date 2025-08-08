@@ -248,3 +248,74 @@ Notes:
 5) Signature verification
 - Keep signature verification enabled when `UNIPILE_WEBHOOK_SECRET` is set; respond 401 on invalid signatures outside debug environments.
 
+
+## 9) Unified Inbox (Proposed)
+
+A cross-channel inbox built on top of existing Unipile integrations, webhooks, analytics, and scheduler.
+
+### Goals
+- **Single view of conversations** across LinkedIn (initial), with room to add email/SMS later.
+- **Fast operator workflow**: unread triage, reply, assign, mark done.
+- **Reliable threading**: correct mapping of inbound/outbound to the same conversation.
+- **Multi-tenant safety**: all data scoped to `client_id` and JWT roles.
+
+### Data Model (additive)
+- **Conversations**: `id`, `client_id`, `channel` (e.g., `linkedin`), `external_chat_id` (Unipile `chat_id`), `subject` (optional), `last_message_at`, `unread_count`, `assigned_to_user_id` (nullable), `status` (open/closed/snoozed), `created_at`, `updated_at`.
+- **Messages**: `id`, `conversation_id`, `direction` (inbound/outbound), `sender_name`, `sender_external_id`, `text`, `html` (nullable), `attachments_json` (nullable), `external_message_id`, `sent_at`, `received_at`, `read_at` (nullable), `created_at`.
+- **Participants**: `id`, `conversation_id`, `role` (attendee/agent), `display_name`, `external_ids_json` (e.g., LinkedIn `member_id`, `public_identifier`, `provider_id`).
+- Indexes: `(client_id, updated_at DESC)`, `(conversation_id, sent_at)`, full-text index on `messages.text/html`.
+
+Notes:
+- Can be implemented with new tables or backed by existing `Event` + minimal new tables. Favor explicit tables for clarity and performance.
+
+### Ingestion & Threading
+- Extend messaging webhook handling to upsert:
+  - Conversation by `external_chat_id` (create if missing), scoped by `client_id` and `channel`.
+  - Participant records for attendees; backfill `public_identifier` when missing using member profile lookup.
+  - Message record with `external_message_id` for idempotency.
+- Update `unread_count` and `last_message_at` atomically on inbound events.
+
+### Outbound/Reply
+- If conversation exists: use `POST /api/v1/chats/{chat_id}/messages` (multipart) and record outbound message.
+- If missing: start 1:1 chat via `POST /api/v1/chats` (multipart) then send and persist `external_chat_id`.
+- Respect daily rate limits; surface failures with actionable error messages and retry policy.
+
+### API Surface (MVP)
+- `GET /api/inbox/conversations?client_id&status&assignee&search&cursor` — list with pagination and search.
+- `GET /api/inbox/conversations/{conversation_id}` — details with participants and latest message snapshot.
+- `GET /api/inbox/conversations/{conversation_id}/messages?cursor` — paginated message history.
+- `POST /api/inbox/conversations/{conversation_id}/reply` — body: `text`, optional attachments.
+- `POST /api/inbox/conversations/{conversation_id}/read` and `/unread` — toggle read state.
+- `POST /api/inbox/conversations/{conversation_id}/assign` — assign to user.
+- `GET /api/inbox/counters?client_id` — unread counts by queue/assignee.
+
+Auth: JWT; all endpoints scoped by `client_id` (multi-tenant).
+
+### Realtime UX
+- Provide Server-Sent Events (SSE) or WebSocket channel that streams conversation/message updates derived from webhook events.
+- Clients subscribe by `client_id`; optional conversation-level streams.
+
+### Permissions & Multi-tenancy
+- Roles: `admin` (all), `agent` (assigned/unassigned queues), `viewer` (read-only).
+- Enforce `client_id` scoping at query layer and in filters.
+
+### Observability & Safety
+- Idempotency on `(channel, external_message_id)` to avoid duplicates.
+- Dead-letter queue for send failures; operator-visible error states.
+- Metrics: reply time, SLA breach counts, unread age distribution.
+
+### Milestones
+1. MVP (1–2 weeks):
+   - Tables: Conversations, Messages, Participants.
+   - Webhook ingestion for `message_received` → create/update conversations and messages.
+   - List/detail/messages endpoints; reply endpoint.
+   - Basic counters and unread toggle.
+2. Realtime + Assignment:
+   - SSE/WebSocket feed; assign/unassign endpoints; per-user queues.
+3. Analytics integration:
+   - Per-client inbox metrics in existing analytics summary; weekly email digest via Resend.
+
+### Open Questions
+- Do we need shared team inboxes per client or per campaign queues?
+- Snooze/close semantics and retention (auto-close after inactivity?).
+- Attachment storage strategy (pass-through vs downloading and re-hosting).

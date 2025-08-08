@@ -109,6 +109,7 @@ Notes:
 
 1. Secure/gate debug endpoints in production (config flag or JWT).
 2. Introduce DB migrations (Alembic/Flask-Migrate) and create migration for `conversation_id` (if missing).
+   - Interim: Added JWT-protected `/api/admin/migrations/status` and `/api/admin/migrations/bootstrap` to safely ensure critical schema in prod.
 3. Persist rate usage per day per account in DB for multi-instance accuracy.
 4. Parameterize snapshot endpoint by `campaign_id`/`name`.
 5. Add nightly job to backfill `conversation_id` for all connected leads.

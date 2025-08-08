@@ -46,6 +46,7 @@ def create_app(config_name=None):
     from src.routes.linkedin_account import linkedin_account_bp
     from src.routes.unipile_auth import unipile_auth_bp
     from src.routes.user import user_bp
+    from src.routes.admin import admin_bp
     
     app.register_blueprint(auth_bp, url_prefix='/api/auth')
     app.register_blueprint(client_bp, url_prefix='/api/clients')
@@ -58,6 +59,7 @@ def create_app(config_name=None):
     app.register_blueprint(linkedin_account_bp, url_prefix='/api/linkedin-accounts')
     app.register_blueprint(unipile_auth_bp, url_prefix='/api/unipile-auth')
     app.register_blueprint(user_bp, url_prefix='/api/users')
+    app.register_blueprint(admin_bp, url_prefix='/api/admin')
     
     # Initialize scheduler with app context
     from src.services.scheduler import get_outreach_scheduler

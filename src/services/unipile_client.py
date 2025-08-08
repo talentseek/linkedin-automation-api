@@ -212,11 +212,18 @@ class UnipileClient:
             endpoint = f"/api/v1/linkedin/accounts/{account_id}/conversations/{conversation_id}/messages"
             return self._make_request("POST", endpoint, json=data)
     
-    def get_conversations(self, account_id):
-        """Get conversations (chats) for an account (with fallbacks)."""
+    def get_conversations(self, account_id, cursor=None, limit=None):
+        """Get conversations (chats) for an account (with fallbacks).
+        If cursor/limit provided, forwards them to primary endpoint.
+        """
         # Doc references: GET /api/v1/chats?account_id=...
+        params = {"account_id": account_id}
+        if cursor:
+            params["cursor"] = cursor
+        if limit:
+            params["limit"] = limit
         try:
-            return self._make_request("GET", "/api/v1/chats", params={"account_id": account_id})
+            return self._make_request("GET", "/api/v1/chats", params=params)
         except UnipileAPIError:
             # Fallback legacy endpoints
             try:
@@ -224,12 +231,28 @@ class UnipileClient:
             except UnipileAPIError:
                 return self._make_request("GET", "/api/v1/conversations", params={"account_id": account_id})
 
+    def get_all_chats(self, account_id, page_limit=1000):
+        """Fetch all chats using pagination on /api/v1/chats when available."""
+        all_items = []
+        cursor = None
+        try:
+            while True:
+                resp = self.get_conversations(account_id, cursor=cursor, limit=page_limit)
+                items = resp.get("items", resp if isinstance(resp, list) else [])
+                all_items.extend(items)
+                cursor = resp.get("cursor")
+                if not cursor:
+                    break
+        except Exception:
+            # Fallback: just return what we have (could be legacy full list)
+            pass
+        return all_items
+
     def find_conversation_with_provider(self, account_id, provider_id):
         """Find a chat that includes the given participant provider_id.
         Returns the Unipile chat_id (which we can use for /chats/{chat_id}/messages)."""
-        convs = self.get_conversations(account_id)
-        # Chats list can be { items: [...] } or a list
-        items = convs.get("items", convs if isinstance(convs, list) else [])
+        # Prefer full pagination
+        items = self.get_all_chats(account_id) or []
         for chat in items:
             # Unipile chat participants may appear under attendees or participants
             participants = chat.get("participants") or chat.get("attendees") or []

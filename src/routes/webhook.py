@@ -736,32 +736,42 @@ def sync_historical_connections():
         from src.services.unipile_client import UnipileClient
         from datetime import datetime
         
-        # Find the campaign that has leads with invite_sent status
-        # Get the campaign with the most invite_sent leads
-        campaign = db.session.query(Campaign).join(Lead).filter(
-            Lead.status == 'invite_sent'
-        ).group_by(Campaign.id).order_by(
-            db.func.count(Lead.id).desc()
-        ).first()
+        # Read optional scoping params
+        body = request.get_json(silent=True) or {}
+        requested_campaign_id = body.get('campaign_id')
+        requested_linkedin_account_id = body.get('linkedin_account_id')
+
+        # Resolve campaign
+        if requested_campaign_id:
+            campaign = Campaign.query.get(requested_campaign_id)
+        else:
+            # Fallback: campaign with most invite_sent leads
+            campaign = db.session.query(Campaign).join(Lead).filter(
+                Lead.status == 'invite_sent'
+            ).group_by(Campaign.id).order_by(
+                db.func.count(Lead.id).desc()
+            ).first()
         
         if not campaign:
             return jsonify({'error': 'No campaign with invite_sent leads found'}), 404
         
-        # Get the LinkedIn account connected to this campaign
-        # LinkedIn accounts belong to clients, and campaigns belong to clients
-        # So we need to find the LinkedIn account that belongs to the same client as the campaign
-        linkedin_account = LinkedInAccount.query.filter_by(
-            client_id=campaign.client_id,
-            status='connected'
-        ).first()
+        # Resolve LinkedIn account
+        if requested_linkedin_account_id:
+            linkedin_account = LinkedInAccount.query.get(requested_linkedin_account_id)
+        else:
+            linkedin_account = LinkedInAccount.query.filter_by(
+                client_id=campaign.client_id,
+                status='connected'
+            ).first()
         
         if not linkedin_account:
             return jsonify({'error': 'No connected LinkedIn account found for this campaign\'s client'}), 404
         
-        # Get all leads from this campaign that have invite_sent status
-        leads = Lead.query.filter_by(
-            campaign_id=campaign.id,
-            status='invite_sent'
+        # Get relevant leads from this campaign (broaden scope)
+        target_statuses = ['invite_sent', 'invited', 'pending_invite', 'connected']
+        leads = Lead.query.filter(
+            Lead.campaign_id == campaign.id,
+            Lead.status.in_(target_statuses)
         ).all()
         
         if not leads:
@@ -800,8 +810,15 @@ def sync_historical_connections():
             public_identifier = relation.get('public_identifier')
             member_id = relation.get('member_id')
             
-            if not public_identifier:
-                continue
+            # If public_identifier missing, try to resolve via member_id
+            if not public_identifier and member_id:
+                try:
+                    profile = unipile.get_user_profile_by_member_id(member_id, linkedin_account.account_id)
+                    public_identifier = profile.get('public_identifier')
+                    # Enrich relation dict for downstream logging
+                    relation['public_identifier'] = public_identifier
+                except Exception as _:
+                    public_identifier = None
             
             # Find matching lead by public_identifier or provider_id
             matching_lead = None
@@ -875,10 +892,34 @@ def sync_historical_connections():
                 })
             else:
                 not_found_count += 1
+                # Track up to 10 unmatched samples for inspection
+                if len(matched_relations) < 0:  # keep logic symmetrical; unmatched samples appended below
+                    pass
         
         # Commit changes
         db.session.commit()
         
+        # Prepare an unmatched sample for inspection
+        unmatched_sample = []
+        try:
+            max_sample = 10
+            for relation in relations:
+                if len(unmatched_sample) >= max_sample:
+                    break
+                ri = relation.get('public_identifier')
+                rm = relation.get('member_id')
+                # If no lead matched on these identifiers
+                found = any(
+                    (lead.public_identifier == ri) or (lead.provider_id == rm) for lead in leads
+                )
+                if not found:
+                    unmatched_sample.append({
+                        'public_identifier': ri,
+                        'member_id': rm
+                    })
+        except Exception:
+            unmatched_sample = []
+
         return jsonify({
             'message': 'Historical sync completed',
             'campaign_id': campaign.id,
@@ -888,7 +929,8 @@ def sync_historical_connections():
             'total_relations_found': len(relations),
             'leads_synced': synced_count,
             'relations_not_matched': not_found_count,
-            'matched_relations': matched_relations
+            'matched_relations': matched_relations,
+            'unmatched_sample': unmatched_sample
         }), 200
         
     except Exception as e:

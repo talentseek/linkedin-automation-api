@@ -29,6 +29,12 @@ class Config:
     # Debug endpoints toggle
     DEBUG_ENDPOINTS_ENABLED = os.environ.get('DEBUG_ENDPOINTS_ENABLED', 'false').lower() == 'true'
 
+    # Notifications (Resend Email)
+    NOTIFICATIONS_ENABLED = os.environ.get('NOTIFICATIONS_ENABLED', 'false').lower() == 'true'
+    RESEND_API_KEY = os.environ.get('RESEND_API_KEY')
+    NOTIFY_EMAIL_TO = os.environ.get('NOTIFY_EMAIL_TO')  # comma-separated
+    NOTIFY_EMAIL_FROM = os.environ.get('NOTIFY_EMAIL_FROM', 'notifications@localhost')
+
 
 class DevelopmentConfig(Config):
     """Development configuration."""

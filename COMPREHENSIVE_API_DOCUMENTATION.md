@@ -858,6 +858,16 @@ Optional JSON body:
 ```
 
 #### POST /webhooks/debug/send-chat
+### Notifications (Resend Email)
+
+- Controlled by environment variables:
+  - `NOTIFICATIONS_ENABLED=true`
+  - `RESEND_API_KEY=...`
+  - `NOTIFY_EMAIL_FROM=notifications@example.com`
+  - `NOTIFY_EMAIL_TO=ops@example.com,team@example.com`
+
+- On `message_received` webhook, the system sends a one-off email with lead name, company, campaign, and an optional preview. Automation is halted for that lead (`status=responded`).
+
 ### Admin Endpoints (JWT)
 
 #### GET /api/admin/migrations/status

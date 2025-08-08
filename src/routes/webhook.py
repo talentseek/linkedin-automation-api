@@ -271,6 +271,13 @@ def handle_message_received_event(payload):
             
             logger.info(f"Lead {lead.id} replied - status updated from {old_status} to responded")
             
+            # Send notification via Resend (if configured)
+            try:
+                from src.services.notifications import notify_lead_replied
+                notify_lead_replied(lead, lead.campaign, message_preview=(message_data.get('message') if isinstance(message_data, dict) else None))
+            except Exception:
+                pass
+
             return jsonify({
                 'message': 'Reply received event processed',
                 'lead_id': lead.id,

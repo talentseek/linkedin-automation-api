@@ -75,8 +75,8 @@ class ProductionConfig(Config):
         if not cls.UNIPILE_API_KEY:
             raise ValueError("UNIPILE_API_KEY environment variable is required for production")
         
-        if not cls.UNIPILE_WEBHOOK_SECRET:
-            raise ValueError("UNIPILE_WEBHOOK_SECRET environment variable is required for production")
+        # UNIPILE_WEBHOOK_SECRET is optional. If provided, incoming webhooks can be authenticated
+        # via header verification. If absent, webhook authentication is skipped.
         
         if not cls.CORS_ORIGINS or cls.CORS_ORIGINS == ['']:
             raise ValueError("CORS_ORIGINS environment variable is required for production")

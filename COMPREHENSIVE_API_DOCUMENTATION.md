@@ -789,6 +789,7 @@ Note:
 - Scheduler status semantics (thread-based):
   - `/api/webhooks/scheduler-status` (no auth) exposes `scheduler_running` and `scheduler_thread_alive` from `running` and `thread.is_alive()`.
   - `/api/automation/scheduler/status` (JWT) returns `{ status, running, thread_alive }`.
+- Webhook authentication: Unipile webhooks do not require a secret by default. If you want to verify requests, set `UNIPILE_WEBHOOK_SECRET` in the app and add a matching `Unipile-Auth` header to the webhook in Unipile. If not set, verification is skipped.
 
 ### Analytics Endpoints
 

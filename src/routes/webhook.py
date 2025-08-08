@@ -768,7 +768,7 @@ def sync_historical_connections():
             return jsonify({'error': 'No connected LinkedIn account found for this campaign\'s client'}), 404
         
         # Get relevant leads from this campaign (broaden scope)
-        target_statuses = ['invite_sent', 'invited', 'pending_invite', 'connected']
+        target_statuses = ['invite_sent', 'invited', 'pending_invite', 'connected', 'messaged', 'responded']
         leads = Lead.query.filter(
             Lead.campaign_id == campaign.id,
             Lead.status.in_(target_statuses)
@@ -776,7 +776,7 @@ def sync_historical_connections():
         
         if not leads:
             return jsonify({
-                'message': 'No leads with invite_sent status found',
+                'message': 'No eligible leads found for historical sync with current scope',
                 'campaign_id': campaign.id,
                 'linkedin_account_id': linkedin_account.id,
                 'account_id': linkedin_account.account_id
@@ -884,6 +884,7 @@ def sync_historical_connections():
                     }
                 )
                 db.session.add(event)
+                # Count a match as synced even if conversation_id not yet found
                 synced_count += 1
                 matched_relations.append({
                     'public_identifier': public_identifier,

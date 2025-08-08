@@ -827,7 +827,20 @@ The system resolves the attendee `member_id` via `/api/v1/users/{identifier}?acc
 Quick analytics (no auth): returns campaign id/name/status, total leads, lead_status_counts, and 10 most recent events.
 
 #### POST /webhooks/sync-historical-connections
-Backfills connections for the currently active campaign by matching Unipile relations with campaign leads and creating historical acceptance events.
+Backfills connections for a campaign by matching Unipile relations with campaign leads and creating historical acceptance events.
+
+Optional JSON body:
+```json
+{
+  "campaign_id": "<uuid>",
+  "linkedin_account_id": "<uuid>"
+}
+```
+
+Behavior:
+- Broad lead scope: invite_sent, invited, pending_invite, connected, messaged, responded.
+- When a relation matches a lead (by public_identifier or member_id→profile→public_identifier), the lead is counted as synced even if conversation_id cannot be resolved immediately. The system keeps attempting to resolve chat IDs later.
+- Response includes matched list and a small unmatched sample plus debug diagnostics (counts and samples of mismatches).
 
 #### POST /webhooks/get-conversation-ids
 Attempts to resolve and persist chat ids for connected leads by scanning Unipile chats.

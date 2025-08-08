@@ -151,9 +151,10 @@ Notes:
   - Align `/api/automation/scheduler/status` to mirror `thread`/`running` flags used by `/api/webhooks/scheduler-status`.
 
 - Historical sync matching:
-  - Do not skip relations without `public_identifier`; use `member_id` to fetch profile via `get_user_profile_by_member_id` and derive `public_identifier`.
-  - Broaden lead scope to include `invited`/`pending_invite`/`connected` when performing historical reconciliation.
-  - Add detailed logs for unmatched relations (`member_id`, `public_identifier`, attempted matches) and return a sample of unmatched entries for inspection.
+  - [DONE] Do not skip relations without `public_identifier`; use `member_id` to fetch profile via `get_user_profile_by_member_id` and derive `public_identifier`.
+  - [DONE] Broaden lead scope to include `invited`/`pending_invite`/`connected`/`messaged`/`responded` when performing historical reconciliation.
+  - [DONE] Add detailed logs for unmatched relations (`member_id`, `public_identifier`, attempted matches) and return a sample of unmatched entries for inspection.
+  - [DONE] Count a lead as synced on identifier match even if `conversation_id` cannot be resolved yet; keep attempting to resolve chat id later.
   - Accept optional `campaign_id` and `linkedin_account_id` params to explicitly scope the sync.
 
 - Debug operations:

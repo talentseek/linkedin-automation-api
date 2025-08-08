@@ -112,6 +112,7 @@ Notes:
 4. Parameterize snapshot endpoint by `campaign_id`/`name`.
 5. Add nightly job to backfill `conversation_id` for all connected leads.
 6. Add replies tracking to analytics (reply counts and reply rate) and surface in summary endpoint once `message_received` webhooks arrive.
+7. Implement operator notifications for replies (e.g., email, Slack, or outbound webhook) with simple on/off config per environment.
 
 ---
 
@@ -221,6 +222,7 @@ Notes:
 
 4) Event handling and analytics
 - [DONE] `message_received` webhook processing persists events and marks leads as `responded` (handler present and wired).
+- [DONE] Halt automation on reply: Scheduler processes only `pending_invite`/`connected`, so `responded` leads are excluded and will not continue in the sequence.
 - Next: include reply metrics in analytics summary.
 - Ensure idempotency by ignoring duplicate event IDs (if present) or by deduping on `(event_type, message_id)`.
 

@@ -1,0 +1,82 @@
+# fly.toml app configuration file generated for linkedin-automation-api on 2025-08-04T11:30:00Z
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+
+app = "linkedin-automation-api"
+primary_region = "lhr"
+
+[build]
+
+[env]
+  FLASK_ENV = "production"
+  PORT = "5001"
+  # Database Configuration
+  DATABASE_URL = "postgresql://postgres:e120fleB@213.188.197.151:5432/postgres"
+  # Security Configuration
+  SECRET_KEY = "your-secret-key-here"
+  JWT_SECRET_KEY = "your-jwt-secret-key-here"
+  # Unipile API Configuration
+           UNIPILE_API_KEY = "/24cB17g.VGRx4/+DnxZcUCtAt7f01fpw4Zb8iMjltxRs4cPBncs="
+  UNIPILE_API_BASE_URL = "https://api3.unipile.com:13359"
+  UNIPILE_WEBHOOK_SECRET = "your-webhook-secret-here"
+  # CORS Configuration
+  CORS_ORIGINS = "https://linkedin-automation-api.fly.dev,https://yourdomain.com"
+  # Rate Limiting Configuration
+  MAX_CONNECTIONS_PER_DAY = "25"
+  MAX_MESSAGES_PER_DAY = "100"
+  MIN_DELAY_BETWEEN_ACTIONS = "300"
+  MAX_DELAY_BETWEEN_ACTIONS = "1800"
+  WORKING_HOURS_START = "9"
+  WORKING_HOURS_END = "17"
+  # Logging Configuration
+  LOG_LEVEL = "INFO"
+  LOG_FILE = "logs/app.log"
+
+[http_service]
+  internal_port = 5001
+  force_https = true
+  auto_stop_machines = true
+  auto_start_machines = true
+  min_machines_running = 1
+  processes = ["app"]
+
+  [[http_service.checks]]
+    grace_period = "10s"
+    interval = "30s"
+    method = "GET"
+    timeout = "5s"
+    path = "/"
+
+[[vm]]
+  cpu_kind = "shared"
+  cpus = 1
+  memory_mb = 1024
+
+[mounts]
+  source = "linkedin_automation_data"
+  destination = "/app/instance"
+
+[[services]]
+  protocol = "tcp"
+  internal_port = 5001
+  processes = ["app"]
+
+  [[services.ports]]
+    port = 80
+    handlers = ["http"]
+    force_https = true
+
+  [[services.ports]]
+    port = 443
+    handlers = ["tls", "http"]
+
+  [services.concurrency]
+    type = "connections"
+    hard_limit = 25
+    soft_limit = 20
+
+  [[services.tcp_checks]]
+    interval = "15s"
+    timeout = "2s"
+    grace_period = "1s"
+    restart_limit = 0 

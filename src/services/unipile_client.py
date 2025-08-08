@@ -152,15 +152,18 @@ class UnipileClient:
         )
     
     def get_search_parameters(self, account_id, param_type='LOCATION', keywords=None, limit=100):
-        """Get search parameters (locations, industries, skills, etc.)."""
+        """Get search parameters (locations, industries, skills, etc.).
+        Docs: GET /api/v1/linkedin/search/parameters?account_id=...&type=...&keywords=...&limit=...
+        """
         params = {
+            'account_id': account_id,
             'type': param_type,
             'limit': limit
         }
         if keywords:
             params['keywords'] = keywords
         
-        return self._make_request('GET', f'/api/v1/accounts/{account_id}/search/parameters', params=params)
+        return self._make_request('GET', '/api/v1/linkedin/search/parameters', params=params)
     
     def get_user_profile(self, identifier, account_id):
         """Get a user profile by identifier (public_id or provider_id)."""
@@ -194,21 +197,20 @@ class UnipileClient:
         return self._make_request('POST', '/api/v1/users/invite', json=data)
     
     def send_message(self, account_id, conversation_id, message):
-        """Send a message to a conversation."""
-        data = {"message": message}
-        # Primary (legacy): send directly into a conversation
-        endpoint = f"/api/v1/linkedin/accounts/{account_id}/conversations/{conversation_id}/messages"
+        """Send a message to a conversation.
+        Docs primary: POST /api/v1/chats/{chat_id}/messages (multipart form) with field `text`.
+        """
+        files = {
+            'text': (None, message)
+        }
+        alt_endpoint = f"/api/v1/chats/{conversation_id}/messages"
         try:
-            return self._make_request("POST", endpoint, json=data)
-        except UnipileAPIError:
-            # Current doc-aligned approach: use chats API (multipart/form-data) with chat_id
-            # See: Send Messages → POST /api/v1/chats/{chat_id}/messages
-            files = {
-                'text': (None, message)
-            }
-            alt_endpoint = f"/api/v1/chats/{conversation_id}/messages"
             return self._make_request("POST", alt_endpoint, files=files)
-        return self._make_request('POST', f'/api/v1/linkedin/accounts/{account_id}/conversations/{conversation_id}/messages', json=data)
+        except UnipileAPIError:
+            # Fallback to legacy JSON endpoint if chats API not available
+            data = {"message": message}
+            endpoint = f"/api/v1/linkedin/accounts/{account_id}/conversations/{conversation_id}/messages"
+            return self._make_request("POST", endpoint, json=data)
     
     def get_conversations(self, account_id):
         """Get conversations (chats) for an account (with fallbacks)."""
@@ -239,15 +241,14 @@ class UnipileClient:
 
     def start_chat_with_attendee(self, account_id, attendee_provider_id, text):
         """Start a 1:1 chat (or reuse existing) and send an initial message using /api/v1/chats.
-        This uses multipart/form-data per docs."""
+        This uses multipart/form-data per docs. `attendees_ids` expects LinkedIn member_id when possible.
+        """
         files = {
             'account_id': (None, account_id),
-            'text': (None, text),
             'attendees_ids': (None, attendee_provider_id),
-            # Per docs, specify LinkedIn API flavor
+            'text': (None, text),
             'linkedin[api]': (None, 'classic'),
         }
-        # Optional provider-specific flags could be added here (e.g., linkedin[inmail])
         return self._make_request("POST", "/api/v1/chats", files=files)
     
     def get_conversation(self, account_id, conversation_id):

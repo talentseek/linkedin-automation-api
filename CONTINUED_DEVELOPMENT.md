@@ -125,6 +125,11 @@ Notes:
    - Define JWT bearer security scheme applied to protected routes
    - Serve at `/openapi.json` and add Swagger UI at `/docs` (read-only)
    - Use spec to drive future frontend types and SDK generation
+9. Weekly client statistics via Resend. [OPEN]
+   - Add `email` field to `Client` (recipient address) [DONE]
+   - Weekly job creates campaign/account metrics (invites/messages/replies, reply rate, top events)
+   - Send summary email to client email(s) using Resend
+   - Env flags: `WEEKLY_REPORTS_ENABLED`, reuse Resend config
 
 ---
 

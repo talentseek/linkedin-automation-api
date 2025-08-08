@@ -874,6 +874,7 @@ Debug utility to send to a single lead via Unipile Chats API. Resolves LinkedIn 
   "id": "string",
   "name": "string",
   "email": "string",
+  "email": "string",
   "timezone": "string",
   "created_at": "datetime",
   "updated_at": "datetime"

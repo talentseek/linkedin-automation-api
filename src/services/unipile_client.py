@@ -271,7 +271,7 @@ class UnipileClient:
         """Reject a connection invitation."""
         return self._make_request('POST', f'/api/v1/linkedin/accounts/{account_id}/invitations/{invitation_id}/reject')
 
-    def create_webhook(self, request_url, webhook_type="users", name="LinkedIn Connection Monitor"):
+    def create_webhook(self, request_url, webhook_type="users", name="LinkedIn Connection Monitor", headers=None, events=None, account_ids=None):
         """
         Create a webhook for monitoring LinkedIn connections.
         
@@ -285,17 +285,25 @@ class UnipileClient:
         """
         endpoint = "/api/v1/webhooks"
         
+        # Build headers list, always include Content-Type json
+        headers_list = [{"key": "Content-Type", "value": "application/json"}]
+        if headers and isinstance(headers, dict):
+            for k, v in headers.items():
+                # avoid duplicating content-type
+                if k.lower() == "content-type":
+                    continue
+                headers_list.append({"key": k, "value": v})
+
         data = {
             "source": webhook_type,
             "request_url": request_url,
             "name": name,
-            "headers": [
-                {
-                    "key": "Content-Type",
-                    "value": "application/json"
-                }
-            ]
+            "headers": headers_list,
         }
+        if events and isinstance(events, list) and len(events) > 0:
+            data["events"] = events
+        if account_ids is not None:
+            data["account_ids"] = account_ids
         
         return self._make_request("POST", endpoint, json=data)
 

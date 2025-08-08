@@ -578,13 +578,25 @@ def reset_leads():
 
 @webhook_bp.route('/register', methods=['POST'])
 def register_webhook():
-    """Register a webhook with Unipile for monitoring LinkedIn connections."""
+    """Register a webhook with Unipile for monitoring LinkedIn connections or messaging.
+
+    Body JSON:
+      - webhook_url: string (required)
+      - source: "users" | "messaging" (default: "users")
+      - name: string (optional)
+      - secret: string (optional) -> sent as header X-Unipile-Secret
+      - events: list[str] (optional) -> to restrict events for the webhook source
+    """
     try:
         from src.services.unipile_client import UnipileClient
         
         # Get the webhook URL from the request
         data = request.get_json()
         webhook_url = data.get('webhook_url')
+        source = (data.get('source') or 'users').strip()
+        name = data.get('name') or ("LinkedIn Connection Monitor" if source == 'users' else "Messaging Webhook")
+        secret = data.get('secret')
+        events = data.get('events')
         
         if not webhook_url:
             return jsonify({'error': 'webhook_url is required'}), 400
@@ -592,18 +604,24 @@ def register_webhook():
         # Initialize Unipile client
         unipile = UnipileClient()
         
-        # Create webhook for users (connection events)
+        # Optional additional headers
+        extra_headers = {"X-Unipile-Secret": secret} if secret else None
+
+        # Create webhook for selected source
         webhook_response = unipile.create_webhook(
             request_url=webhook_url,
-            webhook_type="users",
-            name="LinkedIn Connection Monitor"
+            webhook_type=source,
+            name=name,
+            headers=extra_headers,
+            events=events,
+            account_ids=[]
         )
         
         logger.info(f"Webhook registered successfully: {webhook_response}")
         
         return jsonify({
             'message': 'Webhook registered successfully',
-            'webhook_id': webhook_response.get('webhook_id'),
+            'webhook_id': webhook_response.get('webhook_id') or webhook_response.get('id'),
             'webhook_url': webhook_url
         }), 201
         
@@ -653,6 +671,60 @@ def delete_webhook(webhook_id):
         
     except Exception as e:
         logger.error(f"Error deleting webhook: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@webhook_bp.route('/webhooks/fix-messaging', methods=['POST'])
+def fix_messaging_webhook():
+    """Ensure a single correctly configured messaging webhook exists.
+
+    Behavior:
+    - Lists existing webhooks
+    - Deletes any messaging webhook pointing to the wrong path
+    - Creates messaging webhook pointing to /api/webhooks/unipile/messaging
+    """
+    try:
+        from src.services.unipile_client import UnipileClient
+        unipile = UnipileClient()
+
+        base_url = request.host_url.rstrip('/')
+        correct_url = f"{base_url}/api/webhooks/unipile/messaging"
+
+        listed = unipile.list_webhooks() or {}
+        items = listed.get('items', [])
+
+        deleted = []
+        for wh in items:
+            if wh.get('source') == 'messaging':
+                req = wh.get('request_url')
+                if not req or not req.endswith('/api/webhooks/unipile/messaging'):
+                    try:
+                        unipile.delete_webhook(wh.get('id'))
+                        deleted.append(wh.get('id'))
+                    except Exception:
+                        continue
+
+        created = unipile.create_webhook(
+            request_url=correct_url,
+            webhook_type='messaging',
+            name='Messaging Webhook',
+            headers=None,
+            events=[
+                'message_received',
+                'message_read',
+                'message_reaction',
+                'message_edited',
+                'message_deleted'
+            ],
+            account_ids=[]
+        )
+
+        return jsonify({
+            'deleted': deleted,
+            'created': created
+        }), 200
+    except Exception as e:
+        logger.error(f"Error ensuring messaging webhook: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 

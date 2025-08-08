@@ -724,13 +724,13 @@ def sync_historical_connections():
         matched_relations = []
         
         # Check each relation against our leads
-            for relation in relations:
+        for relation in relations:
             public_identifier = relation.get('public_identifier')
             member_id = relation.get('member_id')
             
             if not public_identifier:
                 continue
-                
+            
             # Find matching lead by public_identifier or provider_id
             matching_lead = None
             for lead in leads:
@@ -760,48 +760,47 @@ def sync_historical_connections():
                             continue
             
             if matching_lead:
-                            # Update lead status
-                            matching_lead.status = 'connected'
-                            matching_lead.connected_at = datetime.utcnow()
-                            
-                            # Try to get conversation ID for this lead
-                            try:
-                                # Find conversation robustly
-                                conversation_id = unipile.find_conversation_with_provider(
-                                    linkedin_account.account_id, matching_lead.provider_id
-                                )
-                                
-                                if conversation_id:
-                                    matching_lead.conversation_id = conversation_id
-                                    logger.info(f"Found conversation ID {conversation_id} for lead {matching_lead.id}")
-                                else:
-                                    logger.warning(f"Could not find conversation ID for lead {matching_lead.id}")
-                                    
-                            except Exception as e:
-                                logger.error(f"Error getting conversation ID for lead {matching_lead.id}: {str(e)}")
-                            
-                            # Create event
-                            event = Event(
-                                event_type='connection_accepted_historical',
-                                lead_id=matching_lead.id,
-                                meta_json={
-                                    'account_id': linkedin_account.account_id,
-                                    'linkedin_account_id': linkedin_account.id,
-                                    'member_id': member_id,
-                                    'public_identifier': public_identifier,
-                                    'conversation_id': matching_lead.conversation_id,
-                                    'relation_data': relation,
-                                    'sync_method': 'historical_sync'
-                                }
-                            )
-                            db.session.add(event)
-                            synced_count += 1
-                            matched_relations.append({
-                                'public_identifier': public_identifier,
-                                'lead_name': f"{matching_lead.first_name} {matching_lead.last_name}",
-                                'lead_company': matching_lead.company_name,
-                                'conversation_id': matching_lead.conversation_id
-                            })
+                # Update lead status
+                matching_lead.status = 'connected'
+                matching_lead.connected_at = datetime.utcnow()
+                
+                # Try to get conversation ID for this lead
+                try:
+                    # Find conversation robustly
+                    conversation_id = unipile.find_conversation_with_provider(
+                        linkedin_account.account_id, matching_lead.provider_id
+                    )
+                    
+                    if conversation_id:
+                        matching_lead.conversation_id = conversation_id
+                        logger.info(f"Found conversation ID {conversation_id} for lead {matching_lead.id}")
+                    else:
+                        logger.warning(f"Could not find conversation ID for lead {matching_lead.id}")
+                except Exception as e:
+                    logger.error(f"Error getting conversation ID for lead {matching_lead.id}: {str(e)}")
+                
+                # Create event
+                event = Event(
+                    event_type='connection_accepted_historical',
+                    lead_id=matching_lead.id,
+                    meta_json={
+                        'account_id': linkedin_account.account_id,
+                        'linkedin_account_id': linkedin_account.id,
+                        'member_id': member_id,
+                        'public_identifier': public_identifier,
+                        'conversation_id': matching_lead.conversation_id,
+                        'relation_data': relation,
+                        'sync_method': 'historical_sync'
+                    }
+                )
+                db.session.add(event)
+                synced_count += 1
+                matched_relations.append({
+                    'public_identifier': public_identifier,
+                    'lead_name': f"{matching_lead.first_name} {matching_lead.last_name}",
+                    'lead_company': matching_lead.company_name,
+                    'conversation_id': matching_lead.conversation_id
+                })
             else:
                 not_found_count += 1
         

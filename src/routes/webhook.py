@@ -804,6 +804,7 @@ def sync_historical_connections():
         synced_count = 0
         not_found_count = 0
         matched_relations = []
+        debug_mismatches = []
         
         # Check each relation against our leads
         for relation in relations:
@@ -892,9 +893,13 @@ def sync_historical_connections():
                 })
             else:
                 not_found_count += 1
-                # Track up to 10 unmatched samples for inspection
-                if len(matched_relations) < 0:  # keep logic symmetrical; unmatched samples appended below
-                    pass
+                # Record detailed mismatch for debugging (limit size)
+                if len(debug_mismatches) < 50:
+                    debug_mismatches.append({
+                        'relation_member_id': member_id,
+                        'relation_public_identifier': public_identifier,
+                        'lead_candidates_checked': len(leads)
+                    })
         
         # Commit changes
         db.session.commit()
@@ -930,7 +935,9 @@ def sync_historical_connections():
             'leads_synced': synced_count,
             'relations_not_matched': not_found_count,
             'matched_relations': matched_relations,
-            'unmatched_sample': unmatched_sample
+            'unmatched_sample': unmatched_sample,
+            'debug_mismatches_count': len(debug_mismatches),
+            'debug_mismatches_sample': debug_mismatches[:10]
         }), 200
         
     except Exception as e:

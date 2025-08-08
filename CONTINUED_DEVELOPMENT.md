@@ -108,6 +108,8 @@ Notes:
 ## 6) Backlog (Prioritized)
 
 1. Secure/gate debug endpoints in production (config flag or JWT).
+   - Enforce webhook signature when `UNIPILE_WEBHOOK_SECRET` is set (users & messaging).
+   - Idempotency: ignore duplicate `message_received` by provider `message_id`.
 2. Introduce DB migrations (Alembic/Flask-Migrate) and create migration for `conversation_id` (if missing).
    - Interim: Added JWT-protected `/api/admin/migrations/status` and `/api/admin/migrations/bootstrap` to safely ensure critical schema in prod.
 3. Persist rate usage per day per account in DB for multi-instance accuracy. [NIGHTLY BACKFILL ADDED]

@@ -46,10 +46,13 @@ def verify_webhook_signature(payload_body, signature_header, secret):
 def handle_users_webhook():
     """Handle webhooks from Unipile for user events (like connection acceptances)."""
     try:
-        # Verify webhook signature (temporarily disabled for testing)
-        # if not verify_webhook_signature(request):
-        #     logger.warning("Invalid webhook signature - but continuing for testing")
-        #     # return jsonify({'error': 'Invalid signature'}), 401
+        # Enforce signature if secret configured
+        payload_body = request.get_data()
+        signature_header = request.headers.get('X-Unipile-Signature')
+        secret = current_app.config.get('UNIPILE_WEBHOOK_SECRET')
+        if secret and not verify_webhook_signature(payload_body, signature_header, secret):
+            logger.warning("Invalid webhook signature for users webhook")
+            return jsonify({'error': 'Invalid signature'}), 401
         
         payload = request.get_json()
         logger.info(f"Received users webhook: {payload}")
@@ -74,10 +77,10 @@ def handle_messaging_webhook():
         signature_header = request.headers.get('X-Unipile-Signature')
         secret = current_app.config.get('UNIPILE_WEBHOOK_SECRET')
         
-        # Verify webhook signature (disabled for local testing)
+        # Verify webhook signature when configured
         if secret and not verify_webhook_signature(payload_body, signature_header, secret):
-            logger.warning("Invalid webhook signature - but continuing for testing")
-            # return jsonify({'error': 'Invalid signature'}), 401
+            logger.warning("Invalid webhook signature for messaging webhook")
+            return jsonify({'error': 'Invalid signature'}), 401
         
         # Parse JSON payload
         try:
@@ -224,6 +227,23 @@ def handle_message_received_event(payload):
             # This might be a message from someone not in our campaigns
             return jsonify({'message': 'Lead not found'}), 200
         
+        # Idempotency: skip if we've already processed this message_id
+        try:
+            if message_id:
+                existing = (
+                    Event.query
+                    .filter(Event.event_type == 'message_received', Event.lead_id == (lead.id if lead else None))
+                    .order_by(Event.timestamp.desc())
+                    .limit(25)
+                    .all()
+                )
+                for ev in existing:
+                    if (ev.meta_json or {}).get('message_id') == message_id:
+                        logger.info("Duplicate message_received ignored (same message_id)")
+                        return jsonify({'message': 'Duplicate ignored'}), 200
+        except Exception:
+            pass
+
         # Update lead status to responded (stop automation)
         if lead.status not in ['responded', 'completed']:
             old_status = lead.status

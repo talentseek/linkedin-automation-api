@@ -13,7 +13,8 @@ Add a dedicated analytics surface beyond the existing snapshot endpoint (`GET /a
   - campaign_id, name, status
   - totals: leads, invite_sent, connected, messaged, responded, completed
   - last_activity_at (max event.timestamp)
-  - last_7_days: counts per day for invites/messages
+  - last_7_days: counts per day for invites/messages/replies
+  - replies metrics: reply_count_last_n_days, reply_rate_last_n_days
 
 ### B. Campaign Time Series
 - Method: `GET /api/analytics/campaigns/{campaign_id}/timeseries?days=30`
@@ -111,7 +112,7 @@ Notes:
 3. Persist rate usage per day per account in DB for multi-instance accuracy.
 4. Parameterize snapshot endpoint by `campaign_id`/`name`.
 5. Add nightly job to backfill `conversation_id` for all connected leads.
-6. Add replies tracking to analytics (reply counts and reply rate) and surface in summary endpoint once `message_received` webhooks arrive.
+6. Enhance reply analytics: time-to-first-reply, reply distribution by step, and per-account reply rates.
 7. Implement operator notifications for replies (e.g., email, Slack, or outbound webhook) with simple on/off config per environment.
 
 ---

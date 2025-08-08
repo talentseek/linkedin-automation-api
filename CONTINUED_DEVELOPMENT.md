@@ -113,7 +113,7 @@ Notes:
 2. Introduce DB migrations (Alembic/Flask-Migrate) and create migration for `conversation_id` (if missing).
    - Interim: Added JWT-protected `/api/admin/migrations/status` and `/api/admin/migrations/bootstrap` to safely ensure critical schema in prod.
 3. Persist rate usage per day per account in DB for multi-instance accuracy. [NIGHTLY BACKFILL ADDED]
-4. Parameterize snapshot endpoint by `campaign_id`/`name`.
+4. Parameterize snapshot endpoint by `campaign_id`/`name`. [DONE]
 5. Add nightly job to backfill `conversation_id` for all connected leads. [DONE]
    - On-demand endpoints: `POST /api/admin/backfill/conversations`, `POST /api/admin/backfill/rate-usage` (JWT)
 6. Enhance reply analytics: time-to-first-reply, reply distribution by step, and per-account reply rates.

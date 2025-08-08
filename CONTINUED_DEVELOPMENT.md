@@ -204,22 +204,24 @@ Notes:
 ### Concrete Actions (Unipile Alignment)
 
 1) Webhooks hygiene
-- Delete and recreate the `messaging` webhook pointing to `/api/webhooks/unipile/messaging`.
+- [DONE] Added `POST /api/webhooks/webhooks/fix-messaging` to auto-delete misconfigured messaging webhooks and create one pointing to `/api/webhooks/unipile/messaging` with standard events.
+- [DONE] Executed in production; old ID removed and new created.
 - Keep `users` webhook on `/api/webhooks/unipile/users`.
 - Ensure both are configured with `Content-Type: application/json` and optional secret header.
 
 2) Historical sync improvements
-- Use `member_id` to fetch profile when `public_identifier` missing; backfill `Lead.public_identifier` and match leads.
-- Expand scope beyond `invite_sent` to include `invited`/`pending_invite`/`connected` when reconciling.
-- Add optional `campaign_id` and `linkedin_account_id` query/body params to target specific scopes.
-- Return a small sample of unmatched relations with `member_id`/`public_identifier` for inspection.
+- [DONE] Use `member_id` to fetch profile when `public_identifier` missing; backfill `Lead.public_identifier` and match leads.
+- [DONE] Expand scope beyond `invite_sent` to include `invited`/`pending_invite`/`connected` when reconciling.
+- [DONE] Add optional `campaign_id` and `linkedin_account_id` body params to target specific scopes.
+- [DONE] Return a small sample of unmatched relations with `member_id`/`public_identifier` for inspection in the response.
 
 3) Chats pagination and robustness
-- Add pagination (`cursor`, `limit`) to `get_conversations` on `/api/v1/chats` and iterate to collect all pages when needed.
+- [DONE] Added pagination via `UnipileClient.get_all_chats` and updated `find_conversation_with_provider` to scan all pages.
 - Only fall back to legacy conversation endpoints on clear 404/5xx from `/api/v1/chats`.
 
 4) Event handling and analytics
-- Implement `message_received` webhook processing → persist event, mark lead `responded`, include reply metrics in analytics summary.
+- [DONE] `message_received` webhook processing persists events and marks leads as `responded` (handler present and wired).
+- Next: include reply metrics in analytics summary.
 - Ensure idempotency by ignoring duplicate event IDs (if present) or by deduping on `(event_type, message_id)`.
 
 5) Signature verification

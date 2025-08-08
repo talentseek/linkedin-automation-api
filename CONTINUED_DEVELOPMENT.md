@@ -118,30 +118,110 @@ Notes:
 ## 7) Production Verification (2025-08-08)
 
 - Webhooks:
-  - Kept a single webhook registered (source `users`, event `new_relation`). Messaging webhook removed to avoid duplicates/conflicts.
-  - Verified via `GET /api/webhooks/list` → now shows 1 webhook.
+  - Current state shows 2 webhooks via `GET /api/webhooks/list`:
+    - `users` source (event `new_relation`) pointing to `/api/webhooks/unipile/users` (OK).
+    - `messaging` source pointing to `/api/webhooks/unipile/users` (INCORRECT endpoint; should be `/api/webhooks/unipile/messaging`).
+  - Action: Delete the misconfigured `messaging` webhook and recreate it with the correct request URL. Keep one webhook per source, covering all accounts.
 
 - Campaign & Scheduler:
-  - Campaign activated via `POST /api/webhooks/activate-campaign`.
-  - `POST /api/automation/scheduler/start` returned success, but status endpoints reported stopped.
-  - Root cause: status endpoint referenced non-existent attributes (`_thread`, `_started`) and not the actual `thread`/`running` flags.
-  - Fix: Updated `/api/webhooks/scheduler-status` to use `scheduler.thread.is_alive()` and `scheduler.running`.
+  - Campaign active and app healthy via `/api/webhooks/status`.
+  - Scheduler auto-starts in production after code change to use resolved `config_name`; verified via `/api/webhooks/scheduler-status` → `scheduler_running=true`, `scheduler_thread_alive=true`.
 
 - Historical Connection Sync:
-  - `POST /api/webhooks/sync-historical-connections` found 20 relations for target account but matched 0 leads.
-  - Likely due to remaining identifier mismatch for some leads (e.g., `public_identifier` absent or not aligned). Needs targeted improvements (see Action Items below).
+  - `POST /api/webhooks/sync-historical-connections` found 9,369 relations for the connected account and matched 0 of 90 `invite_sent` leads.
+  - Likely causes:
+    - Relations often lack `public_identifier`; our loop currently skips when absent.
+    - Lead `provider_id` may not be the LinkedIn `member_id` expected by relations.
+    - Scope limited to `invite_sent` may miss already advanced leads.
+  - Action: See “Historical sync matching” action items below.
 
 - Analytics Endpoints (JWT):
-  - Summary and timeseries working and returning expected aggregates for campaign `263b189e-c56a-441d-a696-a422de28621c`.
-  - Account rate usage returns daily invites/messages aligned with limits (25/100).
+  - Endpoints in place but require a production JWT. Current local token failed signature verification (different `JWT_SECRET_KEY`).
+  - Action: Generate a prod JWT via `/api/auth/login` and retest `summary`, `timeseries`, and `rate-usage`.
 
 ### Action Items
 
-- Scheduler visibility: Align `/api/automation/scheduler/status` to reflect thread-based scheduler state consistently with `/api/webhooks/scheduler-status`.
+- Webhooks:
+  - Delete misconfigured `messaging` webhook and recreate with request URL `/api/webhooks/unipile/messaging`.
+  - Maintain a single webhook per source (users, messaging) that covers all accounts.
+
+- Scheduler visibility:
+  - Align `/api/automation/scheduler/status` to mirror `thread`/`running` flags used by `/api/webhooks/scheduler-status`.
+
 - Historical sync matching:
-  - Ensure we match by `public_identifier` first; if missing, resolve via profile lookup from `member_id` to fill lead fields.
-  - Add logging for unmatched relations including `member_id`, `public_identifier`, and attempted matches.
-  - Add optional scoping to a specific LinkedIn account and campaign explicitly in the endpoint params.
+  - Do not skip relations without `public_identifier`; use `member_id` to fetch profile via `get_user_profile_by_member_id` and derive `public_identifier`.
+  - Broaden lead scope to include `invited`/`pending_invite`/`connected` when performing historical reconciliation.
+  - Add detailed logs for unmatched relations (`member_id`, `public_identifier`, attempted matches) and return a sample of unmatched entries for inspection.
+  - Accept optional `campaign_id` and `linkedin_account_id` params to explicitly scope the sync.
+
+- Debug operations:
+  - Temporarily enable `DEBUG_ENDPOINTS_ENABLED=true` in production to use `/api/webhooks/get-conversation-ids` and `/api/webhooks/debug/send-chat`, then disable after checks.
 
 
+
+## 8) Unipile Alignment Audit (Docs Cross-check)
+
+- Webhooks (per docs):
+  - A single webhook per source (e.g., `users`, `messaging`) can cover all accounts (`account_ids: []`). Our current setup matches this.
+  - Must return HTTP 200 within 30s; Unipile retries up to 5 times on non-200. Our handlers return quickly; keep heavy work async.
+  - Authentication: Unipile supports adding a custom secret header and verifying signature. We compute/validate `X-Unipile-Signature` when a secret is configured; keep secret optional in prod.
+  - Headers: When creating via API, explicitly set `Content-Type: application/json` (we do).
+  - Action: Fix `messaging` webhook `request_url` to `/api/webhooks/unipile/messaging` (currently mis-pointing to `/users`). Ensure events include: `message_received`, `message_read`, `message_reaction`, `message_edited`, `message_deleted`.
+
+- Users/Relations:
+  - Endpoint: `GET /api/v1/users/relations?account_id=...&cursor=...&limit=...` with pagination. We implemented cursor+limit and iterate until no cursor (OK).
+  - Fields: relations may include `member_id` and may lack `public_identifier`.
+  - Action: In historical sync, do NOT skip when `public_identifier` missing. Use `member_id` to fetch profile (`GET /api/v1/users/{member_id}?account_id=...`) and derive `public_identifier` to match and backfill lead fields.
+
+- Profiles:
+  - Endpoint: `GET /api/v1/users/{identifier}?account_id=...` where identifier can be `public_identifier` or LinkedIn `member_id`. We have both `get_user_profile` and `get_user_profile_by_member_id` (OK).
+
+- Chats (Conversations):
+  - Primary list: `GET /api/v1/chats?account_id=...&cursor=...&limit=...` (paginated). We call `/api/v1/chats` but do not page; add pagination support and fall back to legacy endpoints only on 404/5xx.
+  - Participants: responses may expose `participants` or `attendees` with participant `provider_id`/`attendee_provider_id`. Our finder checks both (OK).
+  - Single chat fetch: `GET /api/v1/chats/{chat_id}` available; we currently don't use (optional).
+
+- Start 1:1 chat:
+  - Endpoint: `POST /api/v1/chats` using multipart form. We send `account_id`, `attendees_ids`, `text`, and `linkedin[api]=classic`.
+  - Docs frequently use an array parameter (e.g., `attendees_ids[]`) for multiple recipients. Action: Confirm whether `attendees_ids` vs `attendees_ids[]` is required; adjust to send array-compatible form when multiple values are needed.
+  - Field names: creation uses `text` for message content; our production results confirm success with `text` (OK).
+
+- Send message in an existing chat:
+  - Endpoint: `POST /api/v1/chats/{chat_id}/messages` using multipart. Field `text` used for content. We do this and fallback to legacy JSON (`message`) if needed (OK).
+
+- Webhook payloads:
+  - `users:new_relation` payload includes `account_id`, `user_provider_id`, optionally `user_public_identifier`.
+  - Action: In `handle_new_relation_event`, also match/update leads by `user_public_identifier` when present, and backfill `Lead.public_identifier` to improve future matches.
+
+- Messaging webhooks:
+  - Events include `message_received`, `message_read`, `message_reaction`, `message_edited`, `message_deleted`.
+  - Action: Implement `message_received` handling: persist event, set lead status to `responded`, increment analytics/reply counters.
+
+- Base URL:
+  - Default documented base is `https://api.unipile.com/v1`. We use a cluster base (`UNIPILE_API_BASE_URL=https://api3.unipile.com:13359`) in production; keep this configurable and consistent across environments.
+
+
+### Concrete Actions (Unipile Alignment)
+
+1) Webhooks hygiene
+- Delete and recreate the `messaging` webhook pointing to `/api/webhooks/unipile/messaging`.
+- Keep `users` webhook on `/api/webhooks/unipile/users`.
+- Ensure both are configured with `Content-Type: application/json` and optional secret header.
+
+2) Historical sync improvements
+- Use `member_id` to fetch profile when `public_identifier` missing; backfill `Lead.public_identifier` and match leads.
+- Expand scope beyond `invite_sent` to include `invited`/`pending_invite`/`connected` when reconciling.
+- Add optional `campaign_id` and `linkedin_account_id` query/body params to target specific scopes.
+- Return a small sample of unmatched relations with `member_id`/`public_identifier` for inspection.
+
+3) Chats pagination and robustness
+- Add pagination (`cursor`, `limit`) to `get_conversations` on `/api/v1/chats` and iterate to collect all pages when needed.
+- Only fall back to legacy conversation endpoints on clear 404/5xx from `/api/v1/chats`.
+
+4) Event handling and analytics
+- Implement `message_received` webhook processing → persist event, mark lead `responded`, include reply metrics in analytics summary.
+- Ensure idempotency by ignoring duplicate event IDs (if present) or by deduping on `(event_type, message_id)`.
+
+5) Signature verification
+- Keep signature verification enabled when `UNIPILE_WEBHOOK_SECRET` is set; respond 401 on invalid signatures outside debug environments.
 

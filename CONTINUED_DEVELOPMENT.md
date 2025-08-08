@@ -110,9 +110,9 @@ Notes:
 1. Secure/gate debug endpoints in production (config flag or JWT).
 2. Introduce DB migrations (Alembic/Flask-Migrate) and create migration for `conversation_id` (if missing).
    - Interim: Added JWT-protected `/api/admin/migrations/status` and `/api/admin/migrations/bootstrap` to safely ensure critical schema in prod.
-3. Persist rate usage per day per account in DB for multi-instance accuracy.
+3. Persist rate usage per day per account in DB for multi-instance accuracy. [NIGHTLY BACKFILL ADDED]
 4. Parameterize snapshot endpoint by `campaign_id`/`name`.
-5. Add nightly job to backfill `conversation_id` for all connected leads.
+5. Add nightly job to backfill `conversation_id` for all connected leads. [DONE]
 6. Enhance reply analytics: time-to-first-reply, reply distribution by step, and per-account reply rates.
 7. Implement operator notifications for replies (e.g., email, Slack, or outbound webhook) with simple on/off config per environment.
 

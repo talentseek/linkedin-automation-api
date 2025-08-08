@@ -8,7 +8,7 @@ import pytz
 from flask import current_app
 
 from src.extensions import db
-from src.models import Lead, LinkedInAccount, Campaign
+from src.models import Lead, LinkedInAccount, Campaign, Event
 from src.services.sequence_engine import SequenceEngine
 from src.models.rate_usage import RateUsage
 
@@ -35,6 +35,10 @@ class OutreachScheduler:
         self.daily_connections = 0
         self.daily_messages = 0
         self.last_reset_date = None
+        # Nightly jobs control
+        self.nightly_hour_utc = 1  # 01:00 UTC by default
+        self._last_conversation_backfill_date = None
+        self._last_rate_usage_backfill_date = None
         
         if app is not None:
             self.init_app(app)
@@ -89,6 +93,8 @@ class OutreachScheduler:
                 
                 # Reset daily counters at midnight
                 self._check_and_reset_daily_counters()
+                # Run nightly maintenance once per day after configured hour
+                self._maybe_run_nightly_backfills()
                 
                 # Sleep for 5 minutes before next iteration
                 time.sleep(300)  # 5 minutes
@@ -113,6 +119,123 @@ class OutreachScheduler:
                 logger.info("Daily counters reset")
         except Exception as e:
             logger.error(f"Error resetting daily counters: {str(e)}")
+
+    def _maybe_run_nightly_backfills(self):
+        try:
+            utc_now = datetime.utcnow()
+            if utc_now.hour < self.nightly_hour_utc:
+                return
+            today = utc_now.date()
+            # Conversation ID backfill
+            if self._last_conversation_backfill_date != today:
+                self._run_conversation_id_backfill()
+                self._last_conversation_backfill_date = today
+            # Rate usage backfill
+            if self._last_rate_usage_backfill_date != today:
+                self._run_rate_usage_backfill()
+                self._last_rate_usage_backfill_date = today
+        except Exception as e:
+            logger.error(f"Nightly backfills failed: {str(e)}")
+
+    def _run_conversation_id_backfill(self):
+        """Attempt to resolve conversation IDs for eligible leads."""
+        try:
+            with self.app.app_context():
+                eligible_statuses = ['connected', 'messaged', 'responded']
+                leads = (
+                    Lead.query
+                    .filter(Lead.status.in_(eligible_statuses))
+                    .filter((Lead.conversation_id.is_(None)) | (Lead.conversation_id == ''))
+                    .all()
+                )
+                if not leads:
+                    logger.info("Conversation backfill: no eligible leads without conversation_id")
+                    return
+                # Choose a connected LinkedIn account per client when needed
+                accounts_by_client = {}
+                def get_account_for_lead(lead: Lead):
+                    client_id = lead.campaign.client_id
+                    if client_id in accounts_by_client:
+                        return accounts_by_client[client_id]
+                    acct = LinkedInAccount.query.filter_by(client_id=client_id, status='connected').first()
+                    accounts_by_client[client_id] = acct
+                    return acct
+                unipile = self._get_sequence_engine()._get_unipile_client()
+                updated = 0
+                for lead in leads:
+                    try:
+                        acct = get_account_for_lead(lead)
+                        if not acct:
+                            continue
+                        chat_id = unipile.find_conversation_with_provider(acct.account_id, lead.provider_id)
+                        if chat_id:
+                            lead.conversation_id = chat_id
+                            updated += 1
+                    except Exception as e:
+                        logger.debug(f"Backfill chat id error for lead {lead.id}: {str(e)}")
+                        continue
+                db.session.commit()
+                logger.info(f"Conversation backfill: updated {updated} of {len(leads)} leads")
+        except Exception as e:
+            logger.error(f"Conversation backfill failed: {str(e)}")
+
+    def _run_rate_usage_backfill(self):
+        """Backfill daily rate usage from events for yesterday (UTC)."""
+        try:
+            with self.app.app_context():
+                from datetime import time as dtime
+                # Yesterday UTC window
+                utc_now = datetime.utcnow()
+                yesterday = (utc_now.date() - timedelta(days=1))
+                start = datetime.combine(yesterday, dtime.min)
+                end = datetime.combine(yesterday + timedelta(days=1), dtime.min)
+                # Fetch relevant events
+                events = (
+                    Event.query
+                    .filter(Event.timestamp >= start, Event.timestamp < end)
+                    .filter(Event.event_type.in_(['connection_request_sent', 'message_sent']))
+                    .all()
+                )
+                if not events:
+                    logger.info("Rate usage backfill: no events for yesterday")
+                    return
+                # Aggregate by linkedin_account_id
+                from collections import defaultdict
+                invites_by_acct = defaultdict(int)
+                messages_by_acct = defaultdict(int)
+                for ev in events:
+                    meta = ev.meta_json or {}
+                    acct_id = meta.get('linkedin_account_id')
+                    if not acct_id:
+                        continue
+                    if ev.event_type == 'connection_request_sent':
+                        invites_by_acct[acct_id] += 1
+                    elif ev.event_type == 'message_sent':
+                        messages_by_acct[acct_id] += 1
+                # Upsert into RateUsage
+                from src.models.rate_usage import RateUsage
+                for acct_id in set(list(invites_by_acct.keys()) + list(messages_by_acct.keys())):
+                    # Get or create row
+                    row = (
+                        db.session.query(RateUsage)
+                        .filter(RateUsage.linkedin_account_id == acct_id, RateUsage.usage_date == yesterday)
+                        .first()
+                    )
+                    if not row:
+                        row = RateUsage(
+                            id=str(db.func.uuid()),
+                            linkedin_account_id=acct_id,
+                            usage_date=yesterday,
+                            invites_sent=0,
+                            messages_sent=0,
+                        )
+                        db.session.add(row)
+                    row.invites_sent = invites_by_acct.get(acct_id, 0)
+                    row.messages_sent = messages_by_acct.get(acct_id, 0)
+                db.session.commit()
+                logger.info(f"Rate usage backfill: upserted {len(set(list(invites_by_acct.keys()) + list(messages_by_acct.keys())))} accounts for {yesterday}")
+        except Exception as e:
+            logger.error(f"Rate usage backfill failed: {str(e)}")
     
     def can_send_connection(self):
         """Check if we can send a connection request."""

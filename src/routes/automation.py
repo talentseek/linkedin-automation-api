@@ -156,21 +156,18 @@ def get_scheduler_status():
     try:
         outreach_scheduler = get_outreach_scheduler()
         
-        # Get job information (simplified for thread-based approach)
-        jobs = []
-        if outreach_scheduler.running:
-            # For thread-based scheduler, we don't have individual jobs
-            # but we can show that it's processing
-            jobs.append({
-                'id': 'background_processor',
-                'name': 'Background Lead Processor',
-                'next_run_time': 'Continuous'
-            })
+        # Reflect thread-based scheduler state
+        thread_alive = False
+        if outreach_scheduler and hasattr(outreach_scheduler, 'thread') and outreach_scheduler.thread is not None:
+            try:
+                thread_alive = outreach_scheduler.thread.is_alive()
+            except Exception:
+                thread_alive = False
         
         return jsonify({
-            'status': 'running' if outreach_scheduler.running else 'stopped',
-            'jobs': jobs,
-            'job_count': len(jobs)
+            'status': 'running' if (outreach_scheduler and getattr(outreach_scheduler, 'running', False)) else 'stopped',
+            'running': bool(outreach_scheduler and getattr(outreach_scheduler, 'running', False)),
+            'thread_alive': thread_alive
         }), 200
         
     except Exception as e:

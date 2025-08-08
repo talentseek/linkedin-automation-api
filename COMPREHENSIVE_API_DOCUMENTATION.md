@@ -784,6 +784,12 @@ Handle Unipile messaging webhook events (messages received, etc.).
 #### POST /webhooks/test
 Test endpoint for webhook development and debugging.
 
+Note:
+- Single-webhook policy: ensure only one webhook (source `users`, event `new_relation`) is registered across all LinkedIn accounts. Use `GET /api/webhooks/list` and `DELETE /api/webhooks/delete/{id}` as needed.
+- Scheduler status semantics (thread-based):
+  - `/api/webhooks/scheduler-status` (no auth) exposes `scheduler_running` and `scheduler_thread_alive` from `running` and `thread.is_alive()`.
+  - `/api/automation/scheduler/status` (JWT) returns `{ status, running, thread_alive }`.
+
 ### Analytics Endpoints
 
 #### GET /api/analytics/campaigns/{campaign_id}/summary (JWT)

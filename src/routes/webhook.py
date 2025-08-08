@@ -703,10 +703,17 @@ def sync_historical_connections():
         # Initialize Unipile client
         unipile = UnipileClient()
         
-        # Get current relations for this specific account
+        # Get current relations for this specific account (paginated)
         try:
-            relations_response = unipile.get_relations(linkedin_account.account_id)
-            relations = relations_response.get('items', [])
+            relations = []
+            cursor = None
+            while True:
+                relations_response = unipile.get_relations(linkedin_account.account_id) if not cursor else unipile.get_relations(linkedin_account.account_id + f"?cursor={cursor}")
+                items = relations_response.get('items', [])
+                relations.extend(items)
+                cursor = relations_response.get('cursor')
+                if not cursor:
+                    break
         except Exception as e:
             logger.error(f"Error getting relations for account {linkedin_account.account_id}: {str(e)}")
             return jsonify({'error': f'Failed to get relations: {str(e)}'}), 500
@@ -717,7 +724,7 @@ def sync_historical_connections():
         matched_relations = []
         
         # Check each relation against our leads
-        for relation in relations:
+            for relation in relations:
             public_identifier = relation.get('public_identifier')
             member_id = relation.get('member_id')
             

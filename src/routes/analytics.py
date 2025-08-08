@@ -78,6 +78,26 @@ def campaign_summary(campaign_id: str):
         total_replies_period = sum(replies_per_day.values())
         reply_rate_period = (total_replies_period / total_messages_period) if total_messages_period else 0.0
 
+        # Time to first reply metrics over the period (in days)
+        from statistics import mean, median
+        tfr_days = []
+        try:
+            # For each lead with a reply in period, compute difference from first message_sent to first message_received
+            by_lead_events = defaultdict(list)
+            for ev in recent_events:
+                by_lead_events[ev.lead_id].append(ev)
+            for lead_id, evs in by_lead_events.items():
+                msgs = sorted([e for e in evs if e.event_type == "message_sent"], key=lambda e: e.timestamp)
+                reps = sorted([e for e in evs if e.event_type == "message_received"], key=lambda e: e.timestamp)
+                if msgs and reps:
+                    dt = (reps[0].timestamp - msgs[0].timestamp).total_seconds() / 86400.0
+                    if dt >= 0:
+                        tfr_days.append(dt)
+        except Exception:
+            pass
+        tfr_avg = mean(tfr_days) if tfr_days else 0.0
+        tfr_median = median(tfr_days) if tfr_days else 0.0
+
         return jsonify(
             {
                 "campaign_id": campaign.id,
@@ -92,6 +112,8 @@ def campaign_summary(campaign_id: str):
                 "replies_received_per_day": replies_per_day,
                 "reply_count_last_n_days": total_replies_period,
                 "reply_rate_last_n_days": reply_rate_period,
+                "time_to_first_reply_days_avg": tfr_avg,
+                "time_to_first_reply_days_median": tfr_median,
             }
         ), 200
     except Exception as e:

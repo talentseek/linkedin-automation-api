@@ -52,7 +52,7 @@ def campaign_summary(campaign_id: str):
         )
         last_activity_at = last_event.timestamp.isoformat() if last_event and last_event.timestamp else None
 
-        # Last 7 days time series for invites/messages
+        # Last 7 days time series for invites/messages/replies
         days_param = request.args.get("days", default=7, type=int)
         since = datetime.utcnow() - timedelta(days=days_param)
         recent_events = (
@@ -66,10 +66,17 @@ def campaign_summary(campaign_id: str):
         days = _daterange(days_param)
         invites_per_day = OrderedDict()
         messages_per_day = OrderedDict()
+        replies_per_day = OrderedDict()
         for d in days:
             day_events = buckets.get(d, [])
             invites_per_day[d.isoformat()] = sum(1 for e in day_events if e.event_type == "connection_request_sent")
             messages_per_day[d.isoformat()] = sum(1 for e in day_events if e.event_type == "message_sent")
+            replies_per_day[d.isoformat()] = sum(1 for e in day_events if e.event_type == "message_received")
+
+        # Aggregate reply metrics over the period
+        total_messages_period = sum(messages_per_day.values())
+        total_replies_period = sum(replies_per_day.values())
+        reply_rate_period = (total_replies_period / total_messages_period) if total_messages_period else 0.0
 
         return jsonify(
             {
@@ -82,6 +89,9 @@ def campaign_summary(campaign_id: str):
                 "last_n_days": days_param,
                 "invites_sent_per_day": invites_per_day,
                 "messages_sent_per_day": messages_per_day,
+                "replies_received_per_day": replies_per_day,
+                "reply_count_last_n_days": total_replies_period,
+                "reply_rate_last_n_days": reply_rate_period,
             }
         ), 200
     except Exception as e:

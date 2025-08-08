@@ -70,7 +70,8 @@ def create_app(config_name=None):
     src.services.scheduler._outreach_scheduler = outreach_scheduler
     
     # Start scheduler in production or when explicitly requested
-    if app.config.get('FLASK_ENV') == 'production' or app.config.get('START_SCHEDULER', False):
+    # Use resolved config_name rather than app.config['FLASK_ENV'] (FLASK_ENV is deprecated in Flask 3)
+    if config_name == 'production' or app.config.get('START_SCHEDULER', False):
         try:
             outreach_scheduler.start()
             app.logger.info("Outreach scheduler started automatically")

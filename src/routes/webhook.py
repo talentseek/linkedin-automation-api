@@ -983,12 +983,18 @@ def scheduler_status():
         from src.services.scheduler import get_outreach_scheduler
         
         scheduler = get_outreach_scheduler()
+        thread_alive = False
+        if scheduler and hasattr(scheduler, 'thread') and scheduler.thread is not None:
+            try:
+                thread_alive = scheduler.thread.is_alive()
+            except Exception:
+                thread_alive = False
         
         return jsonify({
-            'scheduler_running': scheduler.running if scheduler else False,
-            'scheduler_thread_alive': scheduler._thread.is_alive() if scheduler and hasattr(scheduler, '_thread') else False,
-            'scheduler_started': scheduler._started if scheduler and hasattr(scheduler, '_started') else False,
-            'campaign_active': True  # We know it's active from our previous check
+            'scheduler_running': bool(scheduler and getattr(scheduler, 'running', False)),
+            'scheduler_thread_alive': thread_alive,
+            'scheduler_started': bool(scheduler and getattr(scheduler, 'running', False)),
+            'campaign_active': True
         }), 200
         
     except Exception as e:

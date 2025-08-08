@@ -113,4 +113,35 @@ Notes:
 5. Add nightly job to backfill `conversation_id` for all connected leads.
 6. Add replies tracking to analytics (reply counts and reply rate) and surface in summary endpoint once `message_received` webhooks arrive.
 
+---
+
+## 7) Production Verification (2025-08-08)
+
+- Webhooks:
+  - Kept a single webhook registered (source `users`, event `new_relation`). Messaging webhook removed to avoid duplicates/conflicts.
+  - Verified via `GET /api/webhooks/list` → now shows 1 webhook.
+
+- Campaign & Scheduler:
+  - Campaign activated via `POST /api/webhooks/activate-campaign`.
+  - `POST /api/automation/scheduler/start` returned success, but status endpoints reported stopped.
+  - Root cause: status endpoint referenced non-existent attributes (`_thread`, `_started`) and not the actual `thread`/`running` flags.
+  - Fix: Updated `/api/webhooks/scheduler-status` to use `scheduler.thread.is_alive()` and `scheduler.running`.
+
+- Historical Connection Sync:
+  - `POST /api/webhooks/sync-historical-connections` found 20 relations for target account but matched 0 leads.
+  - Likely due to remaining identifier mismatch for some leads (e.g., `public_identifier` absent or not aligned). Needs targeted improvements (see Action Items below).
+
+- Analytics Endpoints (JWT):
+  - Summary and timeseries working and returning expected aggregates for campaign `263b189e-c56a-441d-a696-a422de28621c`.
+  - Account rate usage returns daily invites/messages aligned with limits (25/100).
+
+### Action Items
+
+- Scheduler visibility: Align `/api/automation/scheduler/status` to reflect thread-based scheduler state consistently with `/api/webhooks/scheduler-status`.
+- Historical sync matching:
+  - Ensure we match by `public_identifier` first; if missing, resolve via profile lookup from `member_id` to fill lead fields.
+  - Add logging for unmatched relations including `member_id`, `public_identifier`, and attempted matches.
+  - Add optional scoping to a specific LinkedIn account and campaign explicitly in the endpoint params.
+
+
 

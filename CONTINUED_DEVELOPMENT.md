@@ -113,6 +113,7 @@ Notes:
 3. Persist rate usage per day per account in DB for multi-instance accuracy. [NIGHTLY BACKFILL ADDED]
 4. Parameterize snapshot endpoint by `campaign_id`/`name`.
 5. Add nightly job to backfill `conversation_id` for all connected leads. [DONE]
+   - On-demand endpoints: `POST /api/admin/backfill/conversations`, `POST /api/admin/backfill/rate-usage` (JWT)
 6. Enhance reply analytics: time-to-first-reply, reply distribution by step, and per-account reply rates.
 7. Implement operator notifications for replies (e.g., email, Slack, or outbound webhook) with simple on/off config per environment.
 

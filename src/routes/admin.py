@@ -3,6 +3,7 @@ from flask_jwt_extended import jwt_required
 from sqlalchemy import inspect, text
 
 from src.extensions import db
+from src.services.scheduler import get_outreach_scheduler
 
 
 admin_bp = Blueprint("admin", __name__)
@@ -77,6 +78,36 @@ def migrations_bootstrap():
         }), 200
     except Exception as e:
         db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+
+
+@admin_bp.route("/backfill/conversations", methods=["POST"])
+@jwt_required()
+def backfill_conversations():
+    """Run the conversation_id backfill immediately (one-off)."""
+    try:
+        scheduler = get_outreach_scheduler()
+        if not scheduler:
+            return jsonify({"error": "scheduler unavailable"}), 500
+        # Execute synchronously
+        scheduler._run_conversation_id_backfill()
+        return jsonify({"message": "Conversation ID backfill triggered"}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@admin_bp.route("/backfill/rate-usage", methods=["POST"])
+@jwt_required()
+def backfill_rate_usage():
+    """Run the rate usage backfill immediately for yesterday (UTC)."""
+    try:
+        scheduler = get_outreach_scheduler()
+        if not scheduler:
+            return jsonify({"error": "scheduler unavailable"}), 500
+        # Execute synchronously
+        scheduler._run_rate_usage_backfill()
+        return jsonify({"message": "Rate usage backfill (yesterday UTC) triggered"}), 200
+    except Exception as e:
         return jsonify({"error": str(e)}), 500
 
 

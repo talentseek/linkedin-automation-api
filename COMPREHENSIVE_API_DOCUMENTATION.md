@@ -4,10 +4,16 @@
 
 The LinkedIn Automation API is a comprehensive backend system that integrates with the Unipile API to provide automated LinkedIn outreach capabilities for multi-tenant SaaS applications. This system enables businesses to manage clients, connect LinkedIn accounts, create outreach campaigns, and automate personalized messaging sequences while respecting LinkedIn's rate limits and best practices.
 
-## Base URL
+## Base URLs
 
+Development:
 ```
-http://localhost:5000/api
+http://localhost:5001/api
+```
+
+Production:
+```
+https://linkedin-automation-api.fly.dev/api
 ```
 
 ## Authentication
@@ -22,50 +28,22 @@ Authorization: Bearer <your_jwt_token>
 
 ### Authentication
 
-#### POST /auth/register
-Register a new user account.
+#### POST /api/auth/login
+Generate a JWT token using an API key (no user/password accounts).
 
 **Request Body:**
 ```json
 {
-  "email": "user@example.com",
-  "password": "securepassword",
-  "name": "John Doe"
+  "api_key": "linkedin-automation-api-key"
 }
 ```
 
 **Response:**
 ```json
 {
-  "message": "User registered successfully",
-  "user": {
-    "id": "user_id",
-    "email": "user@example.com",
-    "name": "John Doe"
-  }
-}
-```
-
-#### POST /auth/login
-Authenticate and receive a JWT token.
-
-**Request Body:**
-```json
-{
-  "email": "user@example.com",
-  "password": "securepassword"
-}
-```
-
-**Response:**
-```json
-{
-  "access_token": "jwt_token_here",
-  "user": {
-    "id": "user_id",
-    "email": "user@example.com",
-    "name": "John Doe"
-  }
+  "access_token": "<jwt>",
+  "token_type": "Bearer",
+  "expires_in": 86400
 }
 ```
 
@@ -825,7 +803,11 @@ The system resolves the attendee `member_id` via `/api/v1/users/{identifier}?acc
 - Step delays (minutes): connection=0, first msg≈4320, second≈8640, third≈12960
 
 #### GET /webhooks/status
-Quick analytics (no auth): returns campaign id/name/status, total leads, lead_status_counts, and 10 most recent events.
+Quick analytics (no auth). Returns campaign id/name/status, total leads, lead_status_counts, and 10 most recent events.
+
+Query params:
+- `campaign_id` (UUID) – optional
+- `campaign_name` (string) – optional (defaults to "Y Meadows Manufacturing Outreach" when omitted)
 
 #### POST /webhooks/sync-historical-connections
 Backfills connections for a campaign by matching Unipile relations with campaign leads and creating historical acceptance events.
@@ -982,7 +964,7 @@ A sequence is an array of steps that define the outreach flow:
 - `{first_name}`: Lead's first name
 - `{last_name}`: Lead's last name
 - `{full_name}`: Lead's full name
-- `{company_name}`: Lead's company name
+- `{company}`: Lead's company name
 
 ## Duplication Management
 

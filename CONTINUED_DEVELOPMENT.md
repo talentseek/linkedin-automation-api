@@ -117,8 +117,14 @@ Notes:
 4. Parameterize snapshot endpoint by `campaign_id`/`name`. [DONE]
 5. Add nightly job to backfill `conversation_id` for all connected leads. [DONE]
    - On-demand endpoints: `POST /api/admin/backfill/conversations`, `POST /api/admin/backfill/rate-usage` (JWT)
-6. Enhance reply analytics: time-to-first-reply, reply distribution by step, and per-account reply rates.
+6. Enhance reply analytics: time-to-first-reply, reply distribution by step, and per-account reply rates. [DONE]
 7. Implement operator notifications for replies (e.g., email, Slack, or outbound webhook) with simple on/off config per environment.
+8. Generate and publish OpenAPI 3.1 spec for the backend. [OPEN]
+   - Include all current endpoints with request/response schemas and examples
+   - Define error schema (code, message, details)
+   - Define JWT bearer security scheme applied to protected routes
+   - Serve at `/openapi.json` and add Swagger UI at `/docs` (read-only)
+   - Use spec to drive future frontend types and SDK generation
 
 ---
 

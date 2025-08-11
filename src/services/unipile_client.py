@@ -124,11 +124,38 @@ class UnipileClient:
             json=search_params
         )
     
+    def search_linkedin_from_url(self, account_id, url):
+        """
+        Search LinkedIn profiles using a Sales Navigator URL.
+        This uses the Unipile API endpoint:
+        POST /api/v1/linkedin/search?account_id=... with the URL in the JSON body.
+        """
+        params = {'account_id': account_id}
+        data = {'url': url}
+        return self._make_request(
+            'POST',
+            '/api/v1/linkedin/search',
+            params=params,
+            json=data
+        )
+
     def search_linkedin_advanced(self, account_id, search_config):
         """
         Search for LinkedIn profiles using advanced search parameters.
         This uses the Unipile API endpoint:
         POST /api/v1/linkedin/search?account_id=... with all search parameters in the JSON body.
+        
+        The search_config should follow Unipile's actual API structure:
+        {
+            "api": "sales_navigator",  # Required: "sales_navigator", "classic", or "recruiter"
+            "category": "people",      # Required: "people", "companies", "jobs", "posts"
+            "keywords": "software engineer",
+            "location": [102277331],   # Array of location IDs
+            "company_headcount": [{"min": 51, "max": 200}],  # Array of objects
+            "seniority": [{"min": 5}],  # Array of objects with min/max
+            "industry": {"include": ["4"]},  # Object with include/exclude
+            "skills": [{"id": "50517", "priority": "MUST_HAVE"}]  # Array of objects
+        }
         """
         # Remove account_id from the body if present
         search_config = dict(search_config)  # shallow copy

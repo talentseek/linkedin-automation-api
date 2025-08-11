@@ -1179,3 +1179,221 @@ The application is designed to be deployed on any platform that supports Python 
 
 For technical support or questions about the API, please refer to the comprehensive documentation or contact the development team.
 
+## 📋 **All Ways to Import Leads - Complete Guide**
+
+Based on my analysis of the codebase, here are **all the current methods** to import leads into the LinkedIn automation system:
+
+---
+
+## 🎯 **1. Manual Lead Creation**
+**Endpoint**: `POST /api/campaigns/{campaign_id}/leads`
+
+**Use Case**: Create individual leads manually
+```json
+{
+  "first_name": "John",
+  "last_name": "Doe", 
+  "company_name": "Example Corp",
+  "public_identifier": "john-doe-123",
+  "status": "pending_invite"
+}
+```
+
+---
+
+## 🔍 **2. Smart Search & Import (NEW & RECOMMENDED)**
+**Endpoint**: `POST /api/campaigns/{campaign_id}/leads/smart-search`
+
+**Use Case**: Easy-to-use search with predefined patterns and correct Unipile API structure
+```json
+{
+  "account_id": "linkedin_account_id",
+  "search_type": "sales_director",
+  "search_params": {
+    "location": "sweden",
+    "company_size_min": 51,
+    "company_size_max": 1000,
+    "industry": "technology"
+  },
+  "max_pages": 5,
+  "max_leads": 100
+}
+```
+
+**Available Search Types:**
+- `sales_director`: Sales directors in technology companies
+- `tech_engineer`: Software engineers in tech companies  
+- `cxo`: C-level executives
+- `custom`: Custom search using helper parameters
+
+**Example: Find sales directors in tech companies in Sweden**
+```json
+{
+  "account_id": "linkedin_account_id",
+  "search_type": "sales_director",
+  "search_params": {
+    "location": "sweden",
+    "company_size_min": 51,
+    "company_size_max": 1000,
+    "industry": "technology"
+  }
+}
+```
+
+---
+
+## 🔧 **3. Custom Advanced Search**
+**Endpoint**: `POST /api/campaigns/{campaign_id}/leads/search-and-import`
+
+**Use Case**: Advanced search with custom parameters (requires correct Unipile API structure)
+```json
+{
+  "account_id": "linkedin_account_id",
+  "search_config": {
+    "api": "sales_navigator",
+    "category": "people",
+    "keywords": "sales director",
+    "location": ["102277331"],
+    "company_headcount": [{"min": 51, "max": 200}],
+    "seniority": [{"min": 5}],
+    "industry": {"include": ["4"]}
+  },
+  "max_pages": 5,
+  "max_leads": 100
+}
+```
+
+**Correct Parameter Structure (Per Unipile API):**
+- `api`: "sales_navigator", "classic", or "recruiter" (REQUIRED)
+- `category`: "people", "companies", "jobs", or "posts" (REQUIRED)
+- `location`: Array of location IDs (not object with include)
+- `company_headcount`: Array of objects with min/max
+- `seniority`: Array of objects with min/max (not object with include)
+- `industry`: Object with include/exclude arrays
+
+---
+
+## 🌐 **4. Sales Navigator URL Import**
+**Endpoint**: `POST /api/campaigns/{campaign_id}/leads/import-from-url`
+
+**Use Case**: Import leads from a LinkedIn Sales Navigator URL
+```json
+{
+  "account_id": "linkedin_account_id",
+  "sales_navigator_url": "https://www.linkedin.com/sales/search/people?..."
+}
+```
+
+---
+
+## 📊 **5. Get Search Parameters Helper**
+**Endpoint**: `GET /api/search-parameters/helper`
+
+**Use Case**: Get available search parameters and helper information
+```json
+{
+  "common_locations": {
+    "sweden": "102277331",
+    "stockholm": "102277331",
+    "united_states": "101174742"
+  },
+  "common_industries": {
+    "technology": "4",
+    "software_development": "4",
+    "consulting": "6"
+  },
+  "seniority_levels": {
+    "entry": {"min": 0, "max": 2},
+    "senior": {"min": 5, "max": 10},
+    "director": {"min": 8, "max": 15}
+  },
+  "predefined_searches": {
+    "sales_director": "Search for sales directors in technology companies",
+    "tech_engineer": "Search for software engineers in tech companies",
+    "cxo": "Search for C-level executives"
+  }
+}
+```
+
+---
+
+## 🔍 **6. Get Search Parameters (Unipile API)**
+**Endpoint**: `GET /api/search-parameters`
+
+**Use Case**: Get location/industry IDs from Unipile API
+```json
+{
+  "account_id": "linkedin_account_id",
+  "type": "LOCATION",
+  "keywords": "san francisco",
+  "limit": 5
+}
+```
+
+---
+
+## 📝 **7. Manual Import with Duplication Check**
+**Endpoint**: `POST /api/campaigns/{campaign_id}/leads/import`
+
+**Use Case**: Import leads with basic search parameters
+```json
+{
+  "account_id": "linkedin_account_id",
+  "search_params": {
+    "api": "sales_navigator",
+    "category": "people",
+    "keywords": "software engineer"
+  }
+}
+```
+
+---
+
+## 🎯 **RECOMMENDED WORKFLOW:**
+
+### **For Simple Searches:**
+Use **Smart Search** (`/smart-search`) with predefined patterns:
+```bash
+# Find sales directors in tech companies in Sweden
+curl -X POST "/api/campaigns/{campaign_id}/leads/smart-search" \
+  -H "Authorization: Bearer {token}" \
+  -d '{
+    "account_id": "linkedin_account_id",
+    "search_type": "sales_director",
+    "search_params": {
+      "location": "sweden",
+      "company_size_min": 51,
+      "company_size_max": 1000
+    }
+  }'
+```
+
+### **For Complex Custom Searches:**
+Use **Custom Advanced Search** (`/search-and-import`) with correct Unipile structure:
+```bash
+curl -X POST "/api/campaigns/{campaign_id}/leads/search-and-import" \
+  -H "Authorization: Bearer {token}" \
+  -d '{
+    "account_id": "linkedin_account_id",
+    "search_config": {
+      "api": "sales_navigator",
+      "category": "people",
+      "keywords": "CFO",
+      "location": ["102277331"],
+      "seniority": [{"min": 10}],
+      "company_headcount": [{"min": 51, "max": 200}]
+    }
+  }'
+```
+
+### **For URL-Based Imports:**
+Use **URL Import** (`/import-from-url`) for existing Sales Navigator searches:
+```bash
+curl -X POST "/api/campaigns/{campaign_id}/leads/import-from-url" \
+  -H "Authorization: Bearer {token}" \
+  -d '{
+    "account_id": "linkedin_account_id",
+    "sales_navigator_url": "https://www.linkedin.com/sales/search/people?..."
+  }'
+```
+

@@ -1,10 +1,11 @@
 from flask import Blueprint, request, jsonify
-from flask_jwt_extended import jwt_required, get_jwt_identity
-from src.models import db, Lead, Campaign, LinkedInAccount
+from flask_jwt_extended import jwt_required
+from src.models import db, Lead, Campaign, LinkedInAccount, Event
 from src.services.unipile_client import UnipileClient, UnipileAPIError
-from sqlalchemy.exc import IntegrityError
-import uuid
+from src.services.search_parameters_helper import SearchParametersHelper, build_sales_director_search, build_tech_engineer_search, build_cxo_search
+from datetime import datetime
 import logging
+import uuid
 
 lead_bp = Blueprint('lead', __name__)
 logger = logging.getLogger(__name__)
@@ -685,6 +686,243 @@ def search_and_import_leads(campaign_id):
         return jsonify({'error': str(e)}), 500
 
 
+@lead_bp.route('/campaigns/<campaign_id>/leads/smart-search', methods=['POST'])
+@jwt_required()
+def smart_search_and_import_leads(campaign_id):
+    """
+    Smart search and import using predefined patterns or custom parameters.
+    This makes it easy to build complex searches like "sales directors in tech companies in Sweden".
+    """
+    try:
+        # Verify campaign exists
+        campaign = Campaign.query.get(campaign_id)
+        if not campaign:
+            return jsonify({'error': 'Campaign not found'}), 404
+        
+        data = request.get_json()
+        
+        if not data or 'account_id' not in data:
+            return jsonify({'error': 'LinkedIn account ID is required'}), 400
+        
+        # Verify LinkedIn account exists and belongs to the same client
+        linkedin_account = LinkedInAccount.query.filter_by(
+            id=data['account_id'],
+            client_id=campaign.client_id
+        ).first()
+        
+        if not linkedin_account:
+            return jsonify({'error': 'LinkedIn account not found or not authorized'}), 404
+        
+        if linkedin_account.status not in ['connected', 'active']:
+            return jsonify({'error': 'LinkedIn account is not connected'}), 400
+        
+        # Get search type and parameters
+        search_type = data.get('search_type', 'custom')  # 'custom', 'sales_director', 'tech_engineer', 'cxo'
+        search_params = data.get('search_params', {})
+        
+        # Build search configuration based on type
+        helper = SearchParametersHelper()
+        
+        if search_type == 'sales_director':
+            search_config = build_sales_director_search(
+                location_name=search_params.get('location', 'sweden'),
+                company_size_min=search_params.get('company_size_min', 51),
+                company_size_max=search_params.get('company_size_max', 1000),
+                industry_name=search_params.get('industry', 'technology')
+            )
+        elif search_type == 'tech_engineer':
+            search_config = build_tech_engineer_search(
+                location_name=search_params.get('location', 'sweden'),
+                company_size_min=search_params.get('company_size_min', 51),
+                company_size_max=search_params.get('company_size_max', 1000),
+                seniority_level=search_params.get('seniority', 'senior')
+            )
+        elif search_type == 'cxo':
+            search_config = build_cxo_search(
+                location_name=search_params.get('location', 'sweden'),
+                company_size_min=search_params.get('company_size_min', 51),
+                company_size_max=search_params.get('company_size_max', 1000)
+            )
+        elif search_type == 'custom':
+            # Use the helper to build custom search
+            search_config = helper.build_search(**search_params)
+        else:
+            return jsonify({'error': f'Unknown search type: {search_type}'}), 400
+        
+        # Pagination parameters
+        max_pages = data.get('max_pages', 5)
+        max_leads = data.get('max_leads', 100)
+        page_limit = data.get('page_limit', 10)
+        
+        # Add limit to search config
+        search_config['limit'] = page_limit
+        
+        # Use Unipile API to perform search with pagination
+        unipile = UnipileClient()
+        
+        imported_leads = []
+        duplicates_skipped = []
+        duplicates_across_campaigns = []
+        errors = []
+        total_profiles_found = 0
+        pages_processed = 0
+        
+        # Start with first page (no cursor)
+        cursor = None
+        
+        while pages_processed < max_pages and len(imported_leads) < max_leads:
+            # Add pagination parameters to search config
+            current_search_config = search_config.copy()
+            current_search_config['limit'] = page_limit
+            
+            # Add cursor if we have one
+            if cursor:
+                current_search_config['cursor'] = cursor
+            
+            logger.info(f"Processing page {pages_processed + 1}, cursor: {cursor}, limit: {page_limit}")
+            
+            search_results = unipile.search_linkedin_advanced(
+                account_id=linkedin_account.account_id,
+                search_config=current_search_config
+            )
+            
+            # Process each profile from search results
+            profiles = search_results.get('items', [])
+            total_profiles_found += len(profiles)
+            
+            if not profiles:
+                logger.info(f"No more profiles found at page {pages_processed + 1}")
+                break
+            
+            for profile in profiles:
+                try:
+                    # Extract profile information
+                    public_identifier = profile.get('public_identifier')
+                    if not public_identifier:
+                        continue
+                    
+                    # Check if lead already exists in this campaign
+                    existing_lead = Lead.query.filter_by(
+                        campaign_id=campaign_id,
+                        public_identifier=public_identifier
+                    ).first()
+                    
+                    if existing_lead:
+                        duplicates_skipped.append({
+                            'public_identifier': public_identifier,
+                            'name': f"{profile.get('first_name', '')} {profile.get('last_name', '')}".strip(),
+                            'existing_lead_id': existing_lead.id,
+                            'existing_status': existing_lead.status
+                        })
+                        continue
+                    
+                    # Check for duplicates across campaigns
+                    cross_campaign_duplicates = Lead.query.filter_by(
+                        public_identifier=public_identifier
+                    ).filter(
+                        Lead.campaign_id != campaign_id
+                    ).all()
+                    
+                    if cross_campaign_duplicates:
+                        duplicate_campaigns = []
+                        for dup_lead in cross_campaign_duplicates:
+                            dup_campaign = Campaign.query.get(dup_lead.campaign_id)
+                            if dup_campaign:
+                                duplicate_campaigns.append({
+                                    'campaign_id': dup_lead.campaign_id,
+                                    'campaign_name': dup_campaign.name,
+                                    'lead_status': dup_lead.status
+                                })
+                        
+                        duplicates_across_campaigns.append({
+                            'public_identifier': public_identifier,
+                            'name': f"{profile.get('first_name', '')} {profile.get('last_name', '')}".strip(),
+                            'existing_campaigns': duplicate_campaigns
+                        })
+                    
+                    # Create new lead
+                    lead = Lead(
+                        id=str(uuid.uuid4()),
+                        campaign_id=campaign_id,
+                        first_name=profile.get('first_name'),
+                        last_name=profile.get('last_name'),
+                        company_name=profile.get('company_name'),
+                        public_identifier=public_identifier,
+                        provider_id=profile.get('id'),
+                        status='pending_invite',
+                        created_at=datetime.utcnow()
+                    )
+                    
+                    db.session.add(lead)
+                    imported_leads.append(lead.to_dict())
+                    
+                    # Create event for lead import
+                    event = Event(
+                        id=str(uuid.uuid4()),
+                        campaign_id=campaign_id,
+                        lead_id=lead.id,
+                        event_type='lead_imported',
+                        timestamp=datetime.utcnow(),
+                        meta_json={
+                            'source': 'smart_search',
+                            'search_type': search_type,
+                            'search_config': search_config,
+                            'linkedin_account_id': linkedin_account.account_id
+                        }
+                    )
+                    db.session.add(event)
+                    
+                except Exception as e:
+                    errors.append(f"Error processing profile {profile.get('public_identifier', 'unknown')}: {str(e)}")
+                    logger.error(f"Error processing profile: {str(e)}")
+            
+            # Get cursor for next page
+            cursor = search_results.get('paging', {}).get('cursor')
+            pages_processed += 1
+            
+            if not cursor:
+                logger.info("No more pages available")
+                break
+        
+        db.session.commit()
+        
+        return jsonify({
+            'message': f'Successfully imported {len(imported_leads)} leads from smart search across {pages_processed} pages',
+            'imported_leads': imported_leads,
+            'total_imported': len(imported_leads),
+            'duplicates_skipped': duplicates_skipped,
+            'duplicates_across_campaigns': duplicates_across_campaigns,
+            'summary': {
+                'total_profiles_found': total_profiles_found,
+                'new_leads_imported': len(imported_leads),
+                'duplicates_in_campaign': len(duplicates_skipped),
+                'duplicates_across_campaigns': len(duplicates_across_campaigns),
+                'errors': len(errors),
+                'pages_processed': pages_processed,
+                'max_pages_requested': max_pages,
+                'max_leads_requested': max_leads
+            },
+            'pagination_info': {
+                'max_pages': max_pages,
+                'max_leads': max_leads,
+                'page_limit': page_limit,
+                'pages_processed': pages_processed
+            },
+            'search_config_used': search_config,
+            'search_type': search_type,
+            'errors': errors
+        }), 200
+        
+    except UnipileAPIError as e:
+        db.session.rollback()
+        logger.error(f"Unipile API error during smart search: {str(e)}")
+        return jsonify({'error': f'Search failed: {str(e)}'}), 400
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error during smart search: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
 @lead_bp.route('/search-parameters', methods=['GET'])
 @jwt_required()
 def get_search_parameters():
@@ -729,6 +967,42 @@ def get_search_parameters():
     except Exception as e:
         logger.error(f"Error getting search parameters: {str(e)}")
         return jsonify({'error': str(e)}), 500
+
+
+@lead_bp.route('/search-parameters/helper', methods=['GET'])
+@jwt_required()
+def get_search_helper_info():
+    """Get information about available search parameters and helper functions."""
+    helper = SearchParametersHelper()
+    
+    return jsonify({
+        'message': 'Search helper information retrieved successfully',
+        'common_locations': helper.COMMON_LOCATIONS,
+        'common_industries': helper.COMMON_INDUSTRIES,
+        'seniority_levels': helper.SENIORITY_LEVELS,
+        'predefined_searches': {
+            'sales_director': 'Search for sales directors in technology companies',
+            'tech_engineer': 'Search for software engineers in tech companies', 
+            'cxo': 'Search for C-level executives'
+        },
+        'usage_examples': {
+            'smart_search': {
+                'endpoint': 'POST /api/campaigns/{campaign_id}/leads/smart-search',
+                'example': {
+                    'account_id': 'linkedin_account_id',
+                    'search_type': 'sales_director',
+                    'search_params': {
+                        'location': 'sweden',
+                        'company_size_min': 51,
+                        'company_size_max': 1000,
+                        'industry': 'technology'
+                    },
+                    'max_pages': 5,
+                    'max_leads': 100
+                }
+            }
+        }
+    }), 200
 
 
 @lead_bp.route('/campaigns/<campaign_id>/leads/merge-duplicates', methods=['POST'])

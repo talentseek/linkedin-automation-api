@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 from src.models import db
-from sqlalchemy import UniqueConstraint
+from sqlalchemy import UniqueConstraint, JSON
 
 
 class Lead(db.Model):
@@ -20,6 +20,7 @@ class Lead(db.Model):
     last_step_sent_at = db.Column(db.DateTime, nullable=True)
     current_step = db.Column(db.Integer, nullable=False, default=0)  # Current step in sequence (0-based)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    meta_json = db.Column(JSON, nullable=True)  # Additional lead data, source info, etc.
     
     # Relationships
     events = db.relationship('Event', backref='lead', lazy=True, cascade='all, delete-orphan')
@@ -41,7 +42,8 @@ class Lead(db.Model):
             'status': self.status,
             'last_step_sent_at': self.last_step_sent_at.isoformat() if self.last_step_sent_at else None,
             'current_step': self.current_step,
-            'created_at': self.created_at.isoformat() if self.created_at else None
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'meta_json': self.meta_json
         }
     
     @property

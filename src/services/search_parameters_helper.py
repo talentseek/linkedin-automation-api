@@ -94,7 +94,8 @@ class SearchParametersHelper:
         skills: Optional[List[Dict[str, Any]]] = None,
         role_keywords: Optional[str] = None,
         role_priority: str = "MUST_HAVE",
-        role_scope: str = "CURRENT_OR_PAST"
+        role_scope: str = "CURRENT_OR_PAST",
+        relationship: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """
         Build a LinkedIn search configuration that matches Unipile's API structure.
@@ -121,6 +122,7 @@ class SearchParametersHelper:
             role_keywords: Role/title keywords
             role_priority: "MUST_HAVE", "NICE_TO_HAVE", "DOESNT_HAVE"
             role_scope: "CURRENT_OR_PAST", "CURRENT", "PAST"
+            relationship: Relationship filter (e.g., {"type": "RELATIONSHIP", "values": [{"id": "F", "text": "1st degree connections", "selectionType": "INCLUDED"}]})
             
         Returns:
             Dict containing the search configuration
@@ -218,6 +220,10 @@ class SearchParametersHelper:
                 "scope": role_scope
             }]
         
+        # Handle relationship filter
+        if relationship:
+            search_config["relationship"] = relationship
+        
         return search_config
     
     def get_location_id(self, location_name: str) -> Optional[str]:
@@ -313,4 +319,48 @@ def build_cxo_search(
         company_headcount_min=company_size_min,
         company_headcount_max=company_size_max,
         seniority_level="cxo"
+    )
+
+
+def build_first_level_connections_search(
+    keywords: Optional[str] = None,
+    location_names: Optional[List[str]] = None,
+    industry_names: Optional[List[str]] = None
+) -> Dict[str, Any]:
+    """
+    Build a search for 1st level connections (your actual LinkedIn connections).
+    
+    Args:
+        keywords: Optional keywords to filter connections
+        location_names: Optional list of location names to filter by
+        industry_names: Optional list of industry names to filter by
+        
+    Example:
+        search_config = build_first_level_connections_search(
+            keywords="engineer",
+            location_names=["sweden"],
+            industry_names=["technology"]
+        )
+    """
+    helper = SearchParametersHelper()
+    
+    # Define the relationship filter for 1st level connections
+    relationship_filter = {
+        "type": "RELATIONSHIP",
+        "values": [
+            {
+                "id": "F",
+                "text": "1st degree connections",
+                "selectionType": "INCLUDED"
+            }
+        ]
+    }
+    
+    return helper.build_search(
+        api="sales_navigator",
+        category="people",
+        keywords=keywords,
+        location_names=location_names,
+        industry_names=industry_names,
+        relationship=relationship_filter
     )

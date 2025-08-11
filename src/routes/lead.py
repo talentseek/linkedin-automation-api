@@ -6,6 +6,7 @@ from src.services.search_parameters_helper import SearchParametersHelper, build_
 from datetime import datetime
 import logging
 import uuid
+import sys
 
 lead_bp = Blueprint('lead', __name__)
 logger = logging.getLogger(__name__)
@@ -859,11 +860,11 @@ def smart_search_and_import_leads(campaign_id):
                     # Create event for lead import
                     event = Event(
                         id=str(uuid.uuid4()),
-                        campaign_id=campaign_id,
                         lead_id=lead.id,
                         event_type='lead_imported',
                         timestamp=datetime.utcnow(),
                         meta_json={
+                            'campaign_id': campaign_id,
                             'source': 'smart_search',
                             'search_type': search_type,
                             'search_config': search_config,
@@ -920,6 +921,174 @@ def smart_search_and_import_leads(campaign_id):
     except Exception as e:
         db.session.rollback()
         logger.error(f"Error during smart search: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@lead_bp.route('/campaigns/<campaign_id>/leads/smart-search-preview', methods=['POST'])
+@jwt_required()
+def smart_search_preview(campaign_id):
+    """
+    Smart search preview using predefined patterns or custom parameters.
+    This shows search results without importing, so you can see the total count first.
+    """
+    try:
+        # Verify campaign exists
+        campaign = Campaign.query.get(campaign_id)
+        if not campaign:
+            return jsonify({'error': 'Campaign not found'}), 404
+        
+        data = request.get_json()
+        
+        if not data or 'account_id' not in data:
+            return jsonify({'error': 'LinkedIn account ID is required'}), 400
+        
+        # Verify LinkedIn account exists and belongs to the same client
+        linkedin_account = LinkedInAccount.query.filter_by(
+            id=data['account_id'],
+            client_id=campaign.client_id
+        ).first()
+        
+        if not linkedin_account:
+            return jsonify({'error': 'LinkedIn account not found or not authorized'}), 404
+        
+        if linkedin_account.status not in ['connected', 'active']:
+            return jsonify({'error': 'LinkedIn account is not connected'}), 400
+        
+        # Get search type and parameters
+        search_type = data.get('search_type')
+        search_params = data.get('search_params', {})
+        
+        # Build search configuration using SearchParametersHelper
+        helper = SearchParametersHelper()
+        
+        if search_type == 'sales_director':
+            search_config = build_sales_director_search(
+                location_name=search_params.get('location'),
+                company_size_min=search_params.get('company_size_min'),
+                company_size_max=search_params.get('company_size_max'),
+                industry_name=search_params.get('industry')
+            )
+        elif search_type == 'tech_engineer':
+            search_config = build_tech_engineer_search(
+                location_name=search_params.get('location'),
+                company_size_min=search_params.get('company_size_min'),
+                company_size_max=search_params.get('company_size_max')
+            )
+        elif search_type == 'cxo':
+            search_config = build_cxo_search(
+                location_name=search_params.get('location'),
+                company_size_min=search_params.get('company_size_min'),
+                company_size_max=search_params.get('company_size_max')
+            )
+        elif search_type == 'custom':
+            # Use custom search parameters
+            search_config = helper.build_search(
+                api=search_params.get('api', 'sales_navigator'),
+                category=search_params.get('category', 'people'),
+                keywords=search_params.get('keywords'),
+                location_names=search_params.get('location_names'),
+                location_ids=search_params.get('location_ids'),
+                company_headcount_min=search_params.get('company_headcount_min'),
+                company_headcount_max=search_params.get('company_headcount_max'),
+                industry_names=search_params.get('industry_names'),
+                industry_ids=search_params.get('industry_ids'),
+                seniority_min=search_params.get('seniority_min'),
+                seniority_max=search_params.get('seniority_max'),
+                seniority_level=search_params.get('seniority_level'),
+                relationship=search_params.get('relationship')
+            )
+        else:
+            return jsonify({'error': f'Unknown search type: {search_type}'}), 400
+        
+        # Pagination parameters for preview
+        page_limit = data.get('page_limit', 10)  # Results per page
+        max_pages = data.get('max_pages', 1)  # Default to 1 page for preview
+        
+        # Add limit to search config
+        search_config['limit'] = page_limit
+        
+        # Use Unipile API to perform search with pagination
+        unipile = UnipileClient()
+        
+        total_profiles_found = 0
+        pages_processed = 0
+        all_profiles = []
+        
+        # Start with first page (no cursor)
+        cursor = None
+        
+        while pages_processed < max_pages:
+            # Add pagination parameters to search config
+            current_search_config = search_config.copy()
+            current_search_config['limit'] = page_limit
+            
+            # Add cursor if we have one
+            if cursor:
+                current_search_config['cursor'] = cursor
+            
+            logger.info(f"Processing page {pages_processed + 1}, cursor: {cursor}, limit: {page_limit}")
+            
+            search_results = unipile.search_linkedin_advanced(
+                account_id=linkedin_account.account_id,
+                search_config=current_search_config
+            )
+            
+            # Process each profile from search results
+            profiles = search_results.get('items', [])
+            total_profiles_found += len(profiles)
+            all_profiles.extend(profiles)
+            
+            if not profiles:
+                logger.info(f"No more profiles found at page {pages_processed + 1}")
+                break
+            
+            # Get cursor for next page
+            cursor = search_results.get('paging', {}).get('cursor')
+            pages_processed += 1
+            
+            if not cursor:
+                logger.info("No more pages available")
+                break
+        
+        # Get pagination info from the last search result
+        paging = search_results.get('paging', {})
+        total_count = paging.get('total_count', total_profiles_found)
+        
+        return jsonify({
+            'campaign_id': campaign_id,
+            'message': f'Smart search preview completed. Found {total_count} total results.',
+            'search_type': search_type,
+            'search_config_used': search_config,
+            'total_results': total_count,
+            'profiles_found_in_preview': total_profiles_found,
+            'pages_processed': pages_processed,
+            'preview_profiles': all_profiles[:10],  # Show first 10 profiles as preview
+            'pagination_info': {
+                'total_count': total_count,
+                'profiles_found_in_preview': total_profiles_found,
+                'pages_processed': pages_processed,
+                'max_pages_requested': max_pages,
+                'page_limit': page_limit,
+                'has_more_pages': cursor is not None,
+                'estimated_total_pages': (total_count // page_limit) + 1 if total_count > 0 else 0
+            },
+            'next_steps': {
+                'import_endpoint': f'POST /api/leads/campaigns/{campaign_id}/leads/smart-search',
+                'import_parameters': {
+                    'account_id': data['account_id'],
+                    'search_type': search_type,
+                    'search_params': search_params,
+                    'max_pages': 'number of pages to import',
+                    'max_leads': 'maximum number of leads to import'
+                }
+            }
+        }), 200
+        
+    except UnipileAPIError as e:
+        logger.error(f"Unipile API error during smart search preview: {str(e)}")
+        return jsonify({'error': f'Search failed: {str(e)}'}), 400
+    except Exception as e:
+        logger.error(f"Error during smart search preview: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 
@@ -1275,4 +1444,283 @@ def delete_lead(lead_id):
     except Exception as e:
         db.session.rollback()
         return jsonify({'error': str(e)}), 500
+
+
+@lead_bp.route('/campaigns/<campaign_id>/leads/first-level-connections', methods=['POST'])
+@jwt_required()
+def import_first_level_connections(campaign_id):
+    """
+    Import 1st level LinkedIn connections as leads.
+    These are already connected, so no connection request is needed.
+    """
+    try:
+        # Get campaign
+        campaign = Campaign.query.get(campaign_id)
+        if not campaign:
+            return jsonify({'error': 'Campaign not found'}), 404
+        
+        # Get request data
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
+        
+        account_id = data.get('account_id')
+        if not account_id:
+            return jsonify({'error': 'account_id is required'}), 400
+        
+        # Get LinkedIn account (account_id can be either database ID or Unipile account_id)
+        linkedin_account = LinkedInAccount.query.filter_by(id=account_id).first()
+        if not linkedin_account:
+            linkedin_account = LinkedInAccount.query.filter_by(account_id=account_id).first()
+        if not linkedin_account:
+            return jsonify({'error': 'LinkedIn account not found'}), 404
+        
+        # Get pagination parameters
+        max_pages = data.get('max_pages', 1)
+        page_limit = data.get('page_limit', 100)  # Higher limit for 1st level connections
+        cursor = data.get('cursor')
+        
+        # Get 1st level connections using get_relations
+        unipile = UnipileClient()
+        all_connections = []
+        current_cursor = cursor
+        pages_processed = 0
+        
+        print(f"Starting import of 1st level connections for campaign {campaign_id}")
+        print(f"Using LinkedIn account: {linkedin_account.account_id}")
+        
+        while pages_processed < max_pages:
+            try:
+                # Get relations (1st level connections)
+                response = unipile.get_relations(
+                    account_id=linkedin_account.account_id,
+                    cursor=current_cursor,
+                    limit=page_limit
+                )
+                
+                if not response or 'items' not in response:
+                    print(f"No more connections found after page {pages_processed + 1}")
+                    break
+                
+                connections = response['items']
+                if not connections:
+                    print(f"No connections in page {pages_processed + 1}")
+                    break
+                
+                all_connections.extend(connections)
+                pages_processed += 1
+                
+                print(f"Page {pages_processed}: Found {len(connections)} connections")
+                
+                # Check for next page
+                current_cursor = response.get('next_cursor')
+                if not current_cursor:
+                    print("No more pages available")
+                    break
+                    
+            except Exception as e:
+                print(f"Error fetching page {pages_processed + 1}: {str(e)}")
+                break
+        
+        print(f"Total connections found: {len(all_connections)}")
+        
+        # Process and import connections
+        imported_count = 0
+        skipped_count = 0
+        error_count = 0
+        
+        for connection in all_connections:
+            try:
+                # Extract connection data (data is directly in connection object, not nested under 'profile')
+                public_identifier = connection.get('public_identifier')
+                first_name = connection.get('first_name', '')
+                last_name = connection.get('last_name', '')
+                headline = connection.get('headline', '')
+                # Note: get_relations doesn't return company/location, these would need to be fetched separately
+                company = ''
+                location = ''
+                
+                # Skip if no public identifier
+                if not public_identifier:
+                    skipped_count += 1
+                    continue
+                
+                # Check if lead already exists
+                existing_lead = Lead.query.filter_by(
+                    campaign_id=campaign_id,
+                    public_identifier=public_identifier
+                ).first()
+                
+                if existing_lead:
+                    skipped_count += 1
+                    continue
+                
+                # Create new lead with 1st level connection status
+                lead = Lead(
+                    campaign_id=campaign_id,
+                    public_identifier=public_identifier,
+                    first_name=first_name,
+                    last_name=last_name,
+                    company_name=headline,  # Use headline as company_name since we don't have company field
+                    status='connected',  # Already connected - no invite needed
+                    current_step=1,  # Start with first message step
+                    last_step_sent_at=datetime.utcnow()
+                )
+                
+                db.session.add(lead)
+                
+                # Flush to get the lead ID
+                db.session.flush()
+                
+                imported_count += 1
+                
+                # Log event
+                event = Event(
+                    lead_id=lead.id,
+                    event_type='lead_imported',
+                    timestamp=datetime.utcnow(),
+                    meta_json={
+                        'campaign_id': campaign_id,
+                        'source': 'first_level_connections',
+                        'connection_data': connection
+                    }
+                )
+                db.session.add(event)
+                
+            except Exception as e:
+                print(f"Error processing connection {public_identifier}: {str(e)}")
+                error_count += 1
+                continue
+        
+        # Commit all changes
+        try:
+            db.session.commit()
+        except Exception as e:
+            print(f"Error during database commit: {str(e)}")
+            db.session.rollback()
+            return jsonify({'error': f'Database error: {str(e)}'}), 500
+        
+        return jsonify({
+            'success': True,
+            'message': f'Successfully imported {imported_count} 1st level connections',
+            'summary': {
+                'total_connections_found': len(all_connections),
+                'imported': imported_count,
+                'skipped': skipped_count,
+                'errors': error_count,
+                'pages_processed': pages_processed
+            },
+            'next_cursor': current_cursor,
+            'campaign_id': campaign_id
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        print(f"Error importing 1st level connections: {str(e)}")
+        return jsonify({'error': f'Failed to import 1st level connections: {str(e)}'}), 500
+
+
+@lead_bp.route('/campaigns/<campaign_id>/leads/first-level-connections/preview', methods=['POST'])
+@jwt_required()
+def preview_first_level_connections(campaign_id):
+    """
+    Preview 1st level LinkedIn connections without importing.
+    """
+    try:
+        # Get campaign
+        campaign = Campaign.query.get(campaign_id)
+        if not campaign:
+            return jsonify({'error': 'Campaign not found'}), 404
+        
+        # Get request data
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
+        
+        account_id = data.get('account_id')
+        if not account_id:
+            return jsonify({'error': 'account_id is required'}), 400
+        
+        # Get LinkedIn account (account_id can be either database ID or Unipile account_id)
+        linkedin_account = LinkedInAccount.query.filter_by(id=account_id).first()
+        if not linkedin_account:
+            linkedin_account = LinkedInAccount.query.filter_by(account_id=account_id).first()
+        if not linkedin_account:
+            return jsonify({'error': 'LinkedIn account not found'}), 404
+        
+        # Get pagination parameters
+        max_pages = data.get('max_pages', 1)
+        page_limit = data.get('page_limit', 100)
+        cursor = data.get('cursor')
+        
+        # Get 1st level connections
+        unipile = UnipileClient()
+        all_connections = []
+        current_cursor = cursor
+        pages_processed = 0
+        total_estimated = 0
+        
+        while pages_processed < max_pages:
+            try:
+                response = unipile.get_relations(
+                    account_id=linkedin_account.account_id,
+                    cursor=current_cursor,
+                    limit=page_limit
+                )
+                
+                if not response or 'items' not in response:
+                    break
+                
+                connections = response['items']
+                if not connections:
+                    break
+                
+                all_connections.extend(connections)
+                pages_processed += 1
+                
+                # Check for next page
+                current_cursor = response.get('next_cursor')
+                if not current_cursor:
+                    break
+                    
+            except Exception as e:
+                print(f"Error fetching page {pages_processed + 1}: {str(e)}")
+                break
+        
+        # Prepare preview data
+        preview_connections = []
+        for connection in all_connections[:10]:  # Show first 10
+            preview_connections.append({
+                'public_identifier': connection.get('public_identifier'),
+                'first_name': connection.get('first_name', ''),
+                'last_name': connection.get('last_name', ''),
+                'headline': connection.get('headline', ''),
+                'company': '',  # get_relations doesn't return company
+                'location': '',  # get_relations doesn't return location
+                'profile_url': connection.get('public_profile_url', f"https://www.linkedin.com/in/{connection.get('public_identifier', '')}")
+            })
+        
+        return jsonify({
+            'success': True,
+            'summary': {
+                'total_connections_found': len(all_connections),
+                'pages_processed': pages_processed,
+                'preview_count': len(preview_connections)
+            },
+            'preview_connections': preview_connections,
+            'next_cursor': current_cursor,
+            'next_steps': {
+                'import_endpoint': f'/api/leads/campaigns/{campaign_id}/leads/first-level-connections',
+                'method': 'POST',
+                'body_example': {
+                    'account_id': account_id,
+                    'max_pages': 1,
+                    'page_limit': 100
+                }
+            }
+        })
+        
+    except Exception as e:
+        print(f"Error previewing 1st level connections: {str(e)}")
+        return jsonify({'error': f'Failed to preview 1st level connections: {str(e)}'}), 500
 

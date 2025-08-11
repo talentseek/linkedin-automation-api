@@ -255,6 +255,18 @@ class OutreachScheduler:
         self.daily_messages += 1
         logger.info(f"Message sent. Daily count: {self.daily_messages}/{self.max_messages_per_day}")
     
+    def can_send_message_to_first_level_connection(self):
+        """Check if we can send a message to a 1st level connection (higher limits)."""
+        # 1st level connections have higher messaging limits
+        # LinkedIn allows more messages to existing connections
+        max_messages_first_level = self.max_messages_per_day * 2  # Double the limit
+        return self.daily_messages < max_messages_first_level
+    
+    def record_message_to_first_level_connection(self):
+        """Record that a message was sent to a 1st level connection."""
+        self.daily_messages += 1
+        logger.info(f"Message sent to 1st level connection. Daily count: {self.daily_messages}/{self.max_messages_per_day * 2}")
+    
     def calculate_next_execution_time(self, timezone_str='Europe/London', delay_minutes=None):
         """Calculate the next execution time considering working hours and timezone."""
         if delay_minutes is None:

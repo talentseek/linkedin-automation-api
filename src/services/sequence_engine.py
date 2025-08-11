@@ -57,9 +57,15 @@ class SequenceEngine:
             sequence = campaign.sequence
             current_step = lead.current_step or 0
             
+            # Special handling for 1st level connections (already connected)
+            is_first_level_connection = lead.meta_json and lead.meta_json.get('source') == 'first_level_connections'
+            
             # Find the next step in the sequence
             for step in sequence:
                 if step['step_order'] > current_step:
+                    # For 1st level connections, skip connection request steps
+                    if is_first_level_connection and step.get('action_type') == 'connection_request':
+                        continue
                     return step
             
             # No more steps in sequence
@@ -87,16 +93,28 @@ class SequenceEngine:
             
             # Check if lead is in the correct status for this step
             action_type = step.get('action_type')
-            if action_type == 'connection_request' and lead.status != 'pending_invite':
-                return {
-                    'can_execute': False,
-                    'reason': f'Lead status is {lead.status}, expected pending_invite for connection request'
-                }
-            elif action_type == 'message' and lead.status != 'connected':
-                return {
-                    'can_execute': False,
-                    'reason': f'Lead status is {lead.status}, expected connected for message'
-                }
+            
+            # Special handling for 1st level connections (already connected)
+            is_first_level_connection = lead.meta_json and lead.meta_json.get('source') == 'first_level_connections'
+            
+            if action_type == 'connection_request':
+                if is_first_level_connection:
+                    # Skip connection requests for 1st level connections
+                    return {
+                        'can_execute': False,
+                        'reason': 'Skipping connection request for 1st level connection'
+                    }
+                elif lead.status != 'pending_invite':
+                    return {
+                        'can_execute': False,
+                        'reason': f'Lead status is {lead.status}, expected pending_invite for connection request'
+                    }
+            elif action_type == 'message':
+                if lead.status != 'connected':
+                    return {
+                        'can_execute': False,
+                        'reason': f'Lead status is {lead.status}, expected connected for message'
+                    }
             
             return {'can_execute': True, 'reason': 'Step can be executed'}
             

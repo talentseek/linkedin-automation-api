@@ -145,7 +145,8 @@ class SearchParametersHelper:
                     if location_id:
                         locations.append(location_id)
             if locations:
-                search_config["location"] = locations
+                # For Sales Navigator, location should be an object with include/exclude
+                search_config["location"] = {"include": locations}
         
         # Handle company headcount
         if company_headcount_min is not None or company_headcount_max is not None:
@@ -173,8 +174,10 @@ class SearchParametersHelper:
         if seniority_level:
             if seniority_level in self.SENIORITY_LEVELS:
                 level_config = self.SENIORITY_LEVELS[seniority_level]
-                search_config["seniority"] = [level_config]
+                # For Sales Navigator, seniority should be an object with include/exclude
+                search_config["seniority"] = {"include": ["director", "experienced_manager"]}
         elif seniority_min is not None or seniority_max is not None:
+            # For numeric seniority, use the array format
             seniority_config = {}
             if seniority_min is not None:
                 seniority_config["min"] = seniority_min

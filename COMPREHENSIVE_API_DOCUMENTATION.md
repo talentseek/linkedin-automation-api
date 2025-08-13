@@ -716,26 +716,27 @@ Get the automation status for a campaign.
 ```
 
 #### GET /automation/rate-limits/{linkedin_account_id}
-Get current rate limit status for a LinkedIn account.
+Returns per-account, per-day rate usage and limits.
+
+Notes:
+- Values are computed from persisted `rate_usage` for today; if missing, they fall back to aggregating today's `Event`s.
+- `first_level_messages` reflects the 2x daily cap for 1st-degree connections.
 
 **Response:**
 ```json
 {
-  "linkedin_account_id": "account_id",
+  "linkedin_account_id": "<db_id>",
+  "account_id": "<unipile_account_id>",
   "daily_limits": {
-    "invites": {
-      "current": 15,
-      "limit": 25,
-      "remaining": 10
-    },
-    "messages": {
-      "current": 45,
-      "limit": 100,
-      "remaining": 55
-    }
+    "invites": { "current": 15, "limit": 25, "remaining": 10 },
+    "messages": { "current": 45, "limit": 100, "remaining": 55 },
+    "first_level_messages": { "current": 45, "limit": 200, "remaining": 155 }
   },
-  "can_send_invite": true,
-  "can_send_message": true
+  "can_send": {
+    "invite": true,
+    "message_normal": true,
+    "message_first_level": true
+  }
 }
 ```
 

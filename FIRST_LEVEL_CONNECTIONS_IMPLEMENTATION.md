@@ -24,10 +24,16 @@ Successfully implemented a complete system for importing and managing 1st level 
 - **Import Status:** `'connected'` (already connected, no invite needed)
 - **Starting Step:** `current_step = 1` (skip connection request, start with first message)
 
+#### **Immediate Messaging**
+- We do not set `last_step_sent_at` during 1st-level import so the scheduler can send the first message immediately (next processing cycle), subject to rate caps.
+
 #### **Sequence Engine Updates**
 - **Skip Connection Requests:** 1st level connections automatically skip connection request steps
 - **Direct Messaging:** Go straight to messaging steps
 - **Source Identification:** Uses `meta_json.source = 'first_level_connections'` to identify
+
+#### **Rate Limiting Updates**
+- **Higher Limits Applied Conditionally:** Scheduler applies 2x daily message caps only for leads marked as 1st-level via `meta_json.source`.
 
 #### **Rate Limiting**
 - **Higher Limits:** Double the messaging limits for 1st level connections

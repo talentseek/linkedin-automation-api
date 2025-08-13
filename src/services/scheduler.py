@@ -380,8 +380,12 @@ class OutreachScheduler:
                         else:
                             logger.warning(f"Daily connection limit reached for lead {lead_id}")
                     elif next_step['action_type'] == 'message':
-                        if self.can_send_message():
-                            self.record_message_sent()
+                        is_first_level = bool(lead.meta_json and lead.meta_json.get('source') == 'first_level_connections')
+                        if (is_first_level and self.can_send_message_to_first_level_connection()) or (not is_first_level and self.can_send_message()):
+                            if is_first_level:
+                                self.record_message_to_first_level_connection()
+                            else:
+                                self.record_message_sent()
                             # Persist usage
                             try:
                                 RateUsage.increment(linkedin_account.account_id, messages=1)
@@ -467,9 +471,15 @@ class OutreachScheduler:
                                 logger.warning(f"Daily connection limit reached ({self.daily_connections}/{self.max_connections_per_day}), skipping lead {lead.id}")
                                 continue
                         elif next_step['action_type'] == 'message':
-                            if not self.can_send_message():
-                                logger.warning(f"Daily message limit reached ({self.daily_messages}/{self.max_messages_per_day}), skipping lead {lead.id}")
-                                continue
+                            is_first_level = bool(lead.meta_json and lead.meta_json.get('source') == 'first_level_connections')
+                            if is_first_level:
+                                if not self.can_send_message_to_first_level_connection():
+                                    logger.warning(f"Daily first-level message limit reached (messages={self.daily_messages}/{self.max_messages_per_day*2}), skipping lead {lead.id}")
+                                    continue
+                            else:
+                                if not self.can_send_message():
+                                    logger.warning(f"Daily message limit reached ({self.daily_messages}/{self.max_messages_per_day}), skipping lead {lead.id}")
+                                    continue
                         
                         # Execute the step
                         logger.info(f"Executing step for lead {lead.id}")
@@ -502,6 +512,14 @@ class OutreachScheduler:
             
             # For connection requests, always ready
             if next_step['action_type'] == 'connection_request':
+                return True
+            
+            # For 1st-level connections, allow immediate first message
+            try:
+                is_first_level = bool(lead.meta_json and lead.meta_json.get('source') == 'first_level_connections')
+            except Exception:
+                is_first_level = False
+            if is_first_level and next_step.get('action_type') == 'message' and lead.status == 'connected':
                 return True
             
             # For messages, check if enough time has passed since the last action

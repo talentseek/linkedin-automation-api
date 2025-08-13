@@ -122,26 +122,68 @@ def get_rate_limits(linkedin_account_id):
         if not linkedin_account:
             return jsonify({'error': 'LinkedIn account not found'}), 404
         
-        outreach_scheduler = get_outreach_scheduler()
-        invite_count = outreach_scheduler.get_daily_count(linkedin_account_id, 'invite')
-        message_count = outreach_scheduler.get_daily_count(linkedin_account_id, 'message')
+        # Compute usage for today from RateUsage (fallback to events if missing)
+        from datetime import date, datetime, timedelta
+        from src.models.rate_usage import RateUsage
+        from src.models import Event
+        
+        today = date.today()
+        invites_today = 0
+        messages_today = 0
+        row = (
+            db.session.query(RateUsage)
+            .filter(RateUsage.linkedin_account_id == linkedin_account.account_id, RateUsage.usage_date == today)
+            .first()
+        )
+        if row:
+            invites_today = row.invites_sent or 0
+            messages_today = row.messages_sent or 0
+        else:
+            # Fallback: aggregate events since midnight UTC
+            start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+            events = (
+                db.session.query(Event)
+                .filter(Event.timestamp >= start)
+                .all()
+            )
+            for ev in events:
+                meta = ev.meta_json or {}
+                if meta.get('linkedin_account_id') == linkedin_account.id:
+                    if ev.event_type == 'connection_request_sent':
+                        invites_today += 1
+                    elif ev.event_type == 'message_sent':
+                        messages_today += 1
+        
+        # Limits from config
+        invites_limit = int(current_app.config.get('MAX_CONNECTIONS_PER_DAY', 25))
+        messages_limit = int(current_app.config.get('MAX_MESSAGES_PER_DAY', 100))
+        first_level_messages_limit = messages_limit * 2
         
         return jsonify({
-            'linkedin_account_id': linkedin_account_id,
+            'linkedin_account_id': linkedin_account.id,
+            'account_id': linkedin_account.account_id,
             'daily_limits': {
                 'invites': {
-                    'current': invite_count,
-                    'limit': outreach_scheduler.max_connections_per_day,
-                    'remaining': max(0, outreach_scheduler.max_connections_per_day - invite_count)
+                    'current': invites_today,
+                    'limit': invites_limit,
+                    'remaining': max(0, invites_limit - invites_today)
                 },
                 'messages': {
-                    'current': message_count,
-                    'limit': outreach_scheduler.max_messages_per_day,
-                    'remaining': max(0, outreach_scheduler.max_messages_per_day - message_count)
+                    'current': messages_today,
+                    'limit': messages_limit,
+                    'remaining': max(0, messages_limit - messages_today)
+                },
+                'first_level_messages': {
+                    'current': messages_today,
+                    'limit': first_level_messages_limit,
+                    'remaining': max(0, first_level_messages_limit - messages_today)
                 }
             },
-            'can_send_invite': outreach_scheduler.can_send_action(linkedin_account_id, 'invite')['can_send'],
-            'can_send_message': outreach_scheduler.can_send_action(linkedin_account_id, 'message')['can_send']
+            'can_send': {
+                'invite': invites_today < invites_limit,
+                'message_normal': messages_today < messages_limit,
+                'message_first_level': messages_today < first_level_messages_limit
+            }
         }), 200
         
     except Exception as e:

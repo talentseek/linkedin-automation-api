@@ -1,5 +1,6 @@
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required
+from sqlalchemy.exc import IntegrityError
 from src.models import db, Lead, Campaign, LinkedInAccount, Event
 from src.services.unipile_client import UnipileClient, UnipileAPIError
 from src.services.search_parameters_helper import SearchParametersHelper, build_sales_director_search, build_tech_engineer_search, build_cxo_search
@@ -1555,6 +1556,19 @@ def import_first_level_connections(campaign_id):
                     skipped_count += 1
                     continue
                 
+                # Try to resolve provider_id for reliable messaging/replies
+                provider_id = connection.get('provider_id')
+                if not provider_id:
+                    try:
+                        unipile = UnipileClient()
+                        profile = unipile.get_user_profile(
+                            identifier=public_identifier,
+                            account_id=linkedin_account.account_id
+                        )
+                        provider_id = profile.get('provider_id')
+                    except Exception:
+                        provider_id = None
+                
                 # Create new lead with 1st level connection status
                 lead = Lead(
                     campaign_id=campaign_id,
@@ -1562,9 +1576,10 @@ def import_first_level_connections(campaign_id):
                     first_name=first_name,
                     last_name=last_name,
                     company_name=headline,  # Use headline as company_name since we don't have company field
+                    provider_id=provider_id,
                     status='connected',  # Already connected - no invite needed
-                    current_step=1,  # Start with first message step
-                    last_step_sent_at=datetime.utcnow()
+                    current_step=1,  # Start at first message step
+                    meta_json={'source': 'first_level_connections'}
                 )
                 
                 db.session.add(lead)

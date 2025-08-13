@@ -1608,6 +1608,39 @@ def backfill_replies():
                 lead.status = 'responded'
                 new_events += 1
         db.session.commit()
+
+        # Fallback: global messages polling in a short lookback to catch any webhook gaps
+        try:
+            from datetime import datetime, timezone
+            after_iso = since_ts.replace(tzinfo=timezone.utc).isoformat()
+            msg_resp = unipile.get_messages(account_id=acct.account_id, after=after_iso, limit=200)
+            items = (msg_resp or {}).get('items', [])
+            for m in items:
+                # inbound only
+                if m.get('is_sender') is True:
+                    continue
+                spid = m.get('sender_id') or m.get('sender', {}).get('provider_id')
+                if not spid:
+                    continue
+                lead = provider_to_lead.get(spid)
+                if not lead:
+                    continue
+                pmid = m.get('provider_message_id') or m.get('id')
+                dup = Event.query.filter(Event.lead_id==lead.id, Event.event_type=='message_received').order_by(Event.timestamp.desc()).limit(50).all()
+                if any((e.meta_json or {}).get('provider_message_id') == pmid or (e.meta_json or {}).get('unipile_message_id') == m.get('id') for e in dup):
+                    continue
+                ev = Event(
+                    lead_id=lead.id,
+                    event_type='message_received',
+                    meta_json={'provider_message_id': pmid, 'unipile_message_id': m.get('id'), 'message_data': m}
+                )
+                db.session.add(ev)
+                lead.status = 'responded'
+                new_events += 1
+            db.session.commit()
+        except Exception:
+            pass
+
         return jsonify({'message': 'Backfill complete', 'new_replies_recorded': new_events}), 200
     except Exception as e:
         db.session.rollback()

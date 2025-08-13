@@ -305,6 +305,24 @@ class UnipileClient:
                     return chat.get("id") or chat.get("chat_id")
         return None
 
+    def get_messages(self, account_id, after=None, before=None, limit=None, cursor=None, sender_id=None):
+        """List messages globally with optional filters (per Unipile docs).
+
+        Params are forwarded as query parameters; include account_id to scope results.
+        """
+        params = {"account_id": account_id}
+        if after:
+            params["after"] = after
+        if before:
+            params["before"] = before
+        if limit:
+            params["limit"] = limit
+        if cursor:
+            params["cursor"] = cursor
+        if sender_id:
+            params["sender_id"] = sender_id
+        return self._make_request("GET", "/api/v1/messages", params=params)
+
     def start_chat_with_attendee(self, account_id, attendee_provider_id, text):
         """Start a 1:1 chat (or reuse existing) and send an initial message using /api/v1/chats.
         This uses multipart/form-data per docs. `attendees_ids` expects LinkedIn member_id when possible.

@@ -78,6 +78,13 @@ class SequenceEngine:
     def can_execute_step(self, lead: Lead, step: Dict[str, Any]) -> Dict[str, Any]:
         """Check if a step can be executed for a lead."""
         try:
+            # Immediate first message after connection acceptance
+            # If the next action is a message and the lead is connected, allow immediately
+            # regardless of the previous last_step_sent_at timing.
+            action_type = step.get('action_type')
+            if action_type == 'message' and lead.status == 'connected':
+                return {'can_execute': True, 'reason': 'Immediate post-accept message allowed'}
+
             # Check if enough time has passed since the last step
             if lead.last_step_sent_at:
                 delay_hours = step.get('delay_hours', 24)

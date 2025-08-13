@@ -482,10 +482,14 @@ class OutreachScheduler:
             
             with self.app.app_context():
                 # Find leads that should be processed
-                leads = Lead.query.filter(
-                    Lead.status.in_(['pending_invite', 'connected']),
-                    Lead.campaign.has(Campaign.status == 'active')
-                ).all()
+                # Include newly connected leads explicitly and prioritize them
+                leads = (
+                    Lead.query
+                    .filter(Lead.campaign.has(Campaign.status == 'active'))
+                    .filter(Lead.status.in_(['pending_invite', 'connected']))
+                    .order_by(Lead.status.desc(), Lead.created_at.asc())
+                    .all()
+                )
                 
                 logger.info(f"Found {len(leads)} leads to process")
                 

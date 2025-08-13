@@ -82,8 +82,9 @@ class SequenceEngine:
             # If the next action is a message and the lead is connected, allow immediately
             # regardless of the previous last_step_sent_at timing.
             action_type = step.get('action_type')
-            if action_type == 'message' and lead.status == 'connected':
-                return {'can_execute': True, 'reason': 'Immediate post-accept message allowed'}
+            if action_type == 'message' and lead.status == 'connected' and (lead.current_step or 0) < 2:
+                # Only the first post-accept message skips delay; subsequent messages keep delay logic
+                return {'can_execute': True, 'reason': 'Immediate post-accept first message allowed'}
 
             # Check if enough time has passed since the last step
             if lead.last_step_sent_at:

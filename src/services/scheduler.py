@@ -3,7 +3,7 @@ import logging
 import random
 import threading
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 import pytz
 from flask import current_app
 
@@ -266,6 +266,35 @@ class OutreachScheduler:
         """Record that a message was sent to a 1st level connection."""
         self.daily_messages += 1
         logger.info(f"Message sent to 1st level connection. Daily count: {self.daily_messages}/{self.max_messages_per_day * 2}")
+
+    # ------------------------
+    # Persisted, per-account usage gating
+    # ------------------------
+    def _get_today_usage_counts(self, provider_account_id: str):
+        """Return (invites_today, messages_today) from persisted RateUsage for the given provider account id."""
+        try:
+            from src.models.rate_usage import RateUsage as RU
+            today = date.today()
+            row = (
+                db.session.query(RU)
+                .filter(RU.linkedin_account_id == provider_account_id, RU.usage_date == today)
+                .first()
+            )
+            if not row:
+                return 0, 0
+            return (row.invites_sent or 0), (row.messages_sent or 0)
+        except Exception as e:
+            logger.warning(f"Failed to read RateUsage for {provider_account_id}: {str(e)}")
+            return 0, 0
+
+    def _can_send_invite_for_account(self, provider_account_id: str) -> bool:
+        invites_today, _ = self._get_today_usage_counts(provider_account_id)
+        return invites_today < int(self.max_connections_per_day)
+
+    def _can_send_message_for_account(self, provider_account_id: str, is_first_level: bool) -> bool:
+        _, messages_today = self._get_today_usage_counts(provider_account_id)
+        limit = int(self.max_messages_per_day) * (2 if is_first_level else 1)
+        return messages_today < limit
     
     def calculate_next_execution_time(self, timezone_str='Europe/London', delay_minutes=None):
         """Calculate the next execution time considering working hours and timezone."""
@@ -501,11 +530,19 @@ class OutreachScheduler:
                         
                         # Check rate limits before executing the step
                         if next_step['action_type'] == 'connection_request':
+                            # Persisted per-account invite cap enforcement
+                            if not self._can_send_invite_for_account(linkedin_account.account_id):
+                                logger.warning(f"Persisted invite cap reached for account {linkedin_account.account_id}, skipping lead {lead.id}")
+                                continue
                             if not self.can_send_connection():
                                 logger.warning(f"Daily connection limit reached ({self.daily_connections}/{self.max_connections_per_day}), skipping lead {lead.id}")
                                 continue
                         elif next_step['action_type'] == 'message':
                             is_first_level = bool(lead.meta_json and lead.meta_json.get('source') == 'first_level_connections')
+                            # Persisted per-account message cap enforcement (with 2x for first-level)
+                            if not self._can_send_message_for_account(linkedin_account.account_id, is_first_level):
+                                logger.warning(f"Persisted message cap reached for account {linkedin_account.account_id}, is_first_level={is_first_level}, skipping lead {lead.id}")
+                                continue
                             if is_first_level:
                                 if not self.can_send_message_to_first_level_connection():
                                     logger.warning(f"Daily first-level message limit reached (messages={self.daily_messages}/{self.max_messages_per_day*2}), skipping lead {lead.id}")

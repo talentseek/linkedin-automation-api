@@ -242,6 +242,18 @@ class UnipileClient:
             data = {"message": message}
             endpoint = f"/api/v1/linkedin/accounts/{account_id}/conversations/{conversation_id}/messages"
             return self._make_request("POST", endpoint, json=data)
+
+    def get_chat_messages(self, chat_id, cursor=None, limit=None):
+        """Get messages for a chat (paginated).
+        Docs pattern: GET /api/v1/chats/{chat_id}/messages with optional cursor/limit.
+        """
+        params = {}
+        if cursor:
+            params['cursor'] = cursor
+        if limit:
+            params['limit'] = limit
+        endpoint = f"/api/v1/chats/{chat_id}/messages"
+        return self._make_request("GET", endpoint, params=params)
     
     def get_conversations(self, account_id, cursor=None, limit=None):
         """Get conversations (chats) for an account (with fallbacks).

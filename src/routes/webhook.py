@@ -114,10 +114,10 @@ def handle_messaging_webhook():
         if not payload:
             return jsonify({'error': 'Empty payload'}), 400
         
-        event_type = payload.get('type')
+        event_type = payload.get('type') or payload.get('event') or (payload.get('data') or {}).get('event_type')
         logger.info(f"Received messaging webhook: {event_type}")
         
-        if event_type == 'message_received':
+        if str(event_type).lower() in ('message_received', 'message', 'message_new'):
             return handle_message_received_event(payload)
         else:
             logger.info(f"Unhandled messaging webhook event type: {event_type}")
@@ -213,8 +213,8 @@ def handle_message_received_event(payload):
     This event is triggered when someone replies to a message.
     """
     try:
-        account_info = payload.get('account_info', {})
-        message_data = payload.get('data', {})
+        account_info = payload.get('account_info') or payload.get('account') or {}
+        message_data = payload.get('data') or payload.get('message') or {}
         
         account_id = account_info.get('account_id')
         if not account_id:
@@ -228,12 +228,12 @@ def handle_message_received_event(payload):
             return jsonify({'message': 'Account not found'}), 200
         
         # Extract sender information
-        sender = message_data.get('sender', {})
-        sender_provider_id = sender.get('attendee_provider_id')
+        sender = message_data.get('sender') or {}
+        sender_provider_id = sender.get('attendee_provider_id') or sender.get('provider_id') or sender.get('id')
         
         # Check if this is an incoming message (not sent by our account)
-        our_user_id = account_info.get('user_id')
-        if sender_provider_id == our_user_id:
+        our_user_id = account_info.get('user_id') or account_info.get('provider_id')
+        if our_user_id and sender_provider_id == our_user_id:
             # This is a message sent by our account, ignore it
             logger.debug("Ignoring outgoing message webhook")
             return jsonify({'message': 'Outgoing message ignored'}), 200
@@ -249,9 +249,10 @@ def handle_message_received_event(payload):
             # This might be a message from someone not in our campaigns
             return jsonify({'message': 'Lead not found'}), 200
         
-        # Idempotency: skip if we've already processed this message_id
+        # Idempotency: skip if we've already processed this provider_message_id/message_id
         try:
-            if message_id:
+            provider_message_id = message_data.get('provider_message_id') or message_data.get('message_id')
+            if provider_message_id:
                 existing = (
                     Event.query
                     .filter(Event.event_type == 'message_received', Event.lead_id == (lead.id if lead else None))
@@ -260,7 +261,7 @@ def handle_message_received_event(payload):
                     .all()
                 )
                 for ev in existing:
-                    if (ev.meta_json or {}).get('message_id') == message_id:
+                    if (ev.meta_json or {}).get('provider_message_id') == provider_message_id:
                         logger.info("Duplicate message_received ignored (same message_id)")
                         return jsonify({'message': 'Duplicate ignored'}), 200
         except Exception:
@@ -279,6 +280,7 @@ def handle_message_received_event(payload):
                     'sender_provider_id': sender_provider_id,
                     'account_id': account_id,
                     'message_data': message_data,
+                    'provider_message_id': message_data.get('provider_message_id') or message_data.get('message_id'),
                     'webhook_payload': payload,
                     'previous_status': old_status
                 }
@@ -1402,6 +1404,99 @@ def resolve_conversation_ids():
     except Exception as e:
         db.session.rollback()
         logger.error(f"Error in resolve_conversation_ids: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@webhook_bp.route('/backfill/replies', methods=['POST'])
+@jwt_required()
+def backfill_replies():
+    """Backfill recent inbound messages for connected/responded leads by scanning chats.
+    Body JSON (optional):
+      - campaign_id
+      - linkedin_account_id
+      - lookback_minutes (default 240)
+    """
+    try:
+        from src.models import Lead, LinkedInAccount, Campaign, Event
+        from src.services.unipile_client import UnipileClient
+        from datetime import datetime, timedelta
+
+        payload = request.get_json(silent=True) or {}
+        campaign_id = payload.get('campaign_id')
+        linkedin_account_id = payload.get('linkedin_account_id')
+        lookback_minutes = int(payload.get('lookback_minutes', 240))
+        since_ts = datetime.utcnow() - timedelta(minutes=lookback_minutes)
+
+        # Scope leads
+        lead_query = Lead.query.filter(Lead.status.in_(['connected','messaged','responded']))
+        if campaign_id:
+            lead_query = lead_query.filter(Lead.campaign_id == campaign_id)
+        leads = lead_query.all()
+        if not leads:
+            return jsonify({'message': 'No eligible leads'}), 200
+
+        # Choose account
+        if linkedin_account_id:
+            acct = LinkedInAccount.query.get(linkedin_account_id)
+        else:
+            acct = LinkedInAccount.query.filter_by(status='connected').first()
+        if not acct:
+            return jsonify({'error': 'No connected LinkedIn account available'}), 404
+
+        unipile = UnipileClient()
+        # Fetch all chats (rely on existing helper)
+        chats = unipile.get_all_chats(acct.account_id) or []
+
+        # Map provider_id -> lead for quick lookup
+        provider_to_lead = {l.provider_id: l for l in leads if l.provider_id}
+        new_events = 0
+        for chat in chats:
+            messages_resp = None
+            try:
+                chat_id = chat.get('id') or chat.get('chat_id')
+                if not chat_id:
+                    continue
+                messages_resp = unipile.get_chat_messages(chat_id, limit=50)
+            except Exception:
+                continue
+            items = (messages_resp or {}).get('items', [])
+            for m in items:
+                # Inbound if sender != our user and sender has provider_id
+                sender = m.get('sender') or {}
+                spid = sender.get('provider_id') or sender.get('attendee_provider_id')
+                if not spid:
+                    continue
+                # Find matching lead
+                lead = provider_to_lead.get(spid)
+                if not lead:
+                    continue
+                # Timestamp check
+                ts = m.get('timestamp') or m.get('created_at')
+                try:
+                    mt = datetime.fromtimestamp(ts/1000.0) if isinstance(ts, (int, float)) else None
+                except Exception:
+                    mt = None
+                if mt and mt < since_ts:
+                    continue
+                # Idempotency by provider_message_id
+                pmid = m.get('provider_message_id') or m.get('id')
+                dup = Event.query.filter(Event.lead_id==lead.id, Event.event_type=='message_received').order_by(Event.timestamp.desc()).limit(50).all()
+                if any((e.meta_json or {}).get('provider_message_id') == pmid for e in dup):
+                    continue
+                # Create event and mark responded
+                ev = Event(
+                    lead_id=lead.id,
+                    event_type='message_received',
+                    meta_json={'provider_message_id': pmid, 'message_data': m}
+                )
+                db.session.add(ev)
+                lead.status = 'responded'
+                new_events += 1
+        db.session.commit()
+        return jsonify({'message': 'Backfill complete', 'new_replies_recorded': new_events}), 200
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error in backfill_replies: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 @webhook_bp.route('/debug/send-chat', methods=['POST'])

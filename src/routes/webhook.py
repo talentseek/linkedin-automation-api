@@ -1541,8 +1541,20 @@ def backfill_replies():
                             break
                 if not spid:
                     continue
-                # Find matching lead
+                # Find matching lead by provider_id; if not found, resolve profile and match by public_identifier
                 lead = provider_to_lead.get(spid)
+                if not lead:
+                    try:
+                        profile = unipile.get_user_profile(identifier=spid, account_id=acct.account_id)
+                        public_id = (profile or {}).get('public_identifier')
+                        if public_id:
+                            # Lazy build mapping by public_identifier
+                            for l in leads:
+                                if getattr(l, 'public_identifier', None) == public_id:
+                                    lead = l
+                                    break
+                    except Exception:
+                        lead = None
                 if not lead:
                     continue
                 # Timestamp check

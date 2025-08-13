@@ -96,8 +96,8 @@ class OutreachScheduler:
                 # Run nightly maintenance once per day after configured hour
                 self._maybe_run_nightly_backfills()
                 
-                # Sleep for 5 minutes before next iteration
-                time.sleep(300)  # 5 minutes
+                # Sleep for 60 seconds before next iteration to reduce latency for new events
+                time.sleep(60)  # 1 minute
                 
             except Exception as e:
                 logger.error(f"Error in processing loop: {str(e)}")

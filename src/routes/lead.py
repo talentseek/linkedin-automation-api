@@ -210,6 +210,17 @@ def import_leads_from_sales_navigator_url(campaign_id):
         if linkedin_account.status not in ['connected', 'active']:
             return jsonify({'error': 'LinkedIn account is not connected'}), 400
         
+        # Flags/controls
+        treat_as_first_level = bool(data.get('treat_as_first_level', False))
+        dry_run = bool(data.get('dry_run', False))
+        raw_title_filter = data.get('title_filter') or data.get('title_filters') or []
+        if isinstance(raw_title_filter, str):
+            title_filter = [raw_title_filter]
+        elif isinstance(raw_title_filter, list):
+            title_filter = [str(t) for t in raw_title_filter]
+        else:
+            title_filter = []
+
         # Parse the Sales Navigator URL
         url = data['sales_navigator_url']
         parsed_url = urllib.parse.urlparse(url)
@@ -259,8 +270,57 @@ def import_leads_from_sales_navigator_url(campaign_id):
         # Process each profile from search results
         # Unipile API returns 'items' not 'profiles'
         profiles = search_results.get('items', [])
+
+        # Apply optional title/headline filtering (case-insensitive)
+        def _profile_matches_title_filters(p, filters):
+            if not filters:
+                return True
+            try:
+                haystack_parts = []
+                for key in ('headline', 'title'):
+                    val = p.get(key)
+                    if isinstance(val, str):
+                        haystack_parts.append(val)
+                # current_positions may be a list of dicts with 'title'
+                for pos in (p.get('current_positions') or []):
+                    t = pos.get('title') or pos.get('role') or ''
+                    if isinstance(t, str):
+                        haystack_parts.append(t)
+                haystack = ' \n '.join(haystack_parts).lower()
+                return any(str(f).lower() in haystack for f in filters)
+            except Exception:
+                return False
+
+        filtered_profiles = [pr for pr in profiles if _profile_matches_title_filters(pr, title_filter)]
+
+        if dry_run:
+            # Return preview without persisting
+            return jsonify({
+                'success': True,
+                'message': 'Dry run preview from Sales Navigator URL',
+                'url_used': url,
+                'requested_flags': {
+                    'treat_as_first_level': treat_as_first_level,
+                    'dry_run': dry_run,
+                    'title_filter': title_filter,
+                },
+                'summary': {
+                    'total_profiles_found': len(profiles),
+                    'total_after_title_filter': len(filtered_profiles),
+                },
+                'preview_profiles': [
+                    {
+                        'public_identifier': p.get('public_identifier'),
+                        'first_name': p.get('first_name'),
+                        'last_name': p.get('last_name'),
+                        'headline': p.get('headline'),
+                        'provider_id': p.get('id') or p.get('provider_id')
+                    }
+                    for p in filtered_profiles[:20]
+                ]
+            }), 200
         
-        for profile in profiles:
+        for profile in filtered_profiles:
             try:
                 # Extract profile information
                 public_identifier = profile.get('public_identifier')
@@ -298,14 +358,38 @@ def import_leads_from_sales_navigator_url(campaign_id):
                         ]
                     })
                 
+                # Determine status and sequencing based on flags
+                status = 'connected' if treat_as_first_level else 'pending_invite'
+                current_step = 1 if treat_as_first_level else 0
+
+                # Provider id resolution
+                provider_id = profile.get('id') or profile.get('provider_id')
+                if treat_as_first_level and not provider_id:
+                    try:
+                        prof = unipile.get_user_profile(
+                            identifier=public_identifier,
+                            account_id=linkedin_account.account_id
+                        )
+                        provider_id = prof.get('provider_id') or prof.get('member_id')
+                    except Exception:
+                        provider_id = None
+
+                # Company name fallback: prefer explicit field, else headline
+                company_name = profile.get('company_name')
+                if not company_name:
+                    company_name = profile.get('headline') or None
+
                 # Create new lead
                 lead = Lead(
                     campaign_id=campaign_id,
                     first_name=profile.get('first_name'),
                     last_name=profile.get('last_name'),
-                    company_name=profile.get('company_name'),
+                    company_name=company_name,
                     public_identifier=public_identifier,
-                    status='pending_invite'
+                    provider_id=provider_id,
+                    status=status,
+                    current_step=current_step,
+                    meta_json={'source': 'first_level_connections'} if treat_as_first_level else None
                 )
                 
                 db.session.add(lead)
@@ -325,12 +409,18 @@ def import_leads_from_sales_navigator_url(campaign_id):
             'duplicates_across_campaigns': duplicates_across_campaigns,
             'summary': {
                 'total_profiles_found': len(profiles),
+                'total_after_title_filter': len(filtered_profiles),
                 'new_leads_imported': len(imported_leads),
                 'duplicates_in_campaign': len(duplicates_skipped),
                 'duplicates_across_campaigns': len(duplicates_across_campaigns),
                 'errors': len(errors)
             },
             'url_used': url,
+            'requested_flags': {
+                'treat_as_first_level': treat_as_first_level,
+                'dry_run': dry_run,
+                'title_filter': title_filter,
+            },
             'errors': errors
         }), 200
         

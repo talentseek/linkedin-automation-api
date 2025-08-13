@@ -1525,9 +1525,20 @@ def backfill_replies():
                 continue
             items = (messages_resp or {}).get('items', [])
             for m in items:
-                # Inbound if sender != our user and sender has provider_id
+                # Extract sender identifier from multiple shapes
                 sender = m.get('sender') or {}
-                spid = sender.get('provider_id') or sender.get('attendee_provider_id')
+                spid = (
+                    sender.get('provider_id')
+                    or sender.get('attendee_provider_id')
+                    or m.get('sender_id')
+                )
+                # If still missing, try attendees of the chat
+                if not spid:
+                    for a in (chat.get('attendees') or chat.get('participants') or []):
+                        cand = a.get('attendee_provider_id') or a.get('provider_id') or a.get('id')
+                        if cand:
+                            spid = cand
+                            break
                 if not spid:
                     continue
                 # Find matching lead

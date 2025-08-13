@@ -124,13 +124,17 @@ class UnipileClient:
             json=search_params
         )
     
-    def search_linkedin_from_url(self, account_id, url):
+    def search_linkedin_from_url(self, account_id, url, cursor=None, limit=None):
         """
-        Search LinkedIn profiles using a Sales Navigator URL.
-        This uses the Unipile API endpoint:
-        POST /api/v1/linkedin/search?account_id=... with the URL in the JSON body.
+        Search LinkedIn profiles using a Sales Navigator URL, with optional cursor pagination.
+        Docs pattern: POST /api/v1/linkedin/search?account_id=...&cursor=...&limit=...
+        Body: { "url": "<sales navigator url>" }
         """
         params = {'account_id': account_id}
+        if cursor:
+            params['cursor'] = cursor
+        if limit:
+            params['limit'] = limit
         data = {'url': url}
         return self._make_request(
             'POST',

@@ -255,21 +255,34 @@ def import_leads_from_sales_navigator_url(campaign_id):
         
         logger.info(f"Using Sales Navigator URL: {url}")
         
-        # Use Unipile API to search for profiles using the URL directly
+        # Use Unipile API to search for profiles using the URL directly with cursor pagination
         unipile = UnipileClient()
-        search_results = unipile.search_linkedin_from_url(
-            account_id=linkedin_account.account_id,
-            url=url
-        )
+        page_limit = int(data.get('page_limit', 10))
+        max_pages = int(data.get('max_pages', 1))
+        cursor = data.get('cursor')
+        pages_processed = 0
+        all_profiles = []
+        while pages_processed < max_pages:
+            search_results = unipile.search_linkedin_from_url(
+                account_id=linkedin_account.account_id,
+                url=url,
+                cursor=cursor,
+                limit=page_limit
+            )
+            page_items = search_results.get('items', [])
+            all_profiles.extend(page_items)
+            pages_processed += 1
+            cursor = search_results.get('cursor') or search_results.get('next_cursor')
+            if not cursor:
+                break
         
         imported_leads = []
         errors = []
         duplicates_skipped = []
         duplicates_across_campaigns = []
         
-        # Process each profile from search results
-        # Unipile API returns 'items' not 'profiles'
-        profiles = search_results.get('items', [])
+        # Process each profile from aggregated results
+        profiles = all_profiles
 
         # Apply optional title/headline filtering (case-insensitive)
         def _profile_matches_title_filters(p, filters):
@@ -307,6 +320,7 @@ def import_leads_from_sales_navigator_url(campaign_id):
                 'summary': {
                     'total_profiles_found': len(profiles),
                     'total_after_title_filter': len(filtered_profiles),
+                    'pages_processed': pages_processed,
                 },
                 'preview_profiles': [
                     {
@@ -317,7 +331,8 @@ def import_leads_from_sales_navigator_url(campaign_id):
                         'provider_id': p.get('id') or p.get('provider_id')
                     }
                     for p in filtered_profiles[:20]
-                ]
+                ],
+                'next_cursor': cursor
             }), 200
         
         for profile in filtered_profiles:
@@ -413,7 +428,8 @@ def import_leads_from_sales_navigator_url(campaign_id):
                 'new_leads_imported': len(imported_leads),
                 'duplicates_in_campaign': len(duplicates_skipped),
                 'duplicates_across_campaigns': len(duplicates_across_campaigns),
-                'errors': len(errors)
+                'errors': len(errors),
+                'pages_processed': pages_processed
             },
             'url_used': url,
             'requested_flags': {
@@ -421,6 +437,7 @@ def import_leads_from_sales_navigator_url(campaign_id):
                 'dry_run': dry_run,
                 'title_filter': title_filter,
             },
+            'next_cursor': cursor,
             'errors': errors
         }), 200
         

@@ -1033,6 +1033,15 @@ def sync_historical_connections():
                     'lead_company': matching_lead.company_name,
                     'conversation_id': matching_lead.conversation_id
                 })
+
+                # Schedule immediate first message for newly connected leads
+                try:
+                    from src.services.scheduler import get_outreach_scheduler
+                    scheduler = get_outreach_scheduler()
+                    if scheduler:
+                        scheduler.schedule_lead_step(matching_lead.id, linkedin_account.id)
+                except Exception:
+                    pass
             else:
                 not_found_count += 1
                 # Record detailed mismatch for debugging (limit size)

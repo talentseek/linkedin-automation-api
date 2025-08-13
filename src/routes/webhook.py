@@ -1587,13 +1587,13 @@ def backfill_replies():
                 # Idempotency by provider_message_id
                 pmid = m.get('provider_message_id') or m.get('id')
                 dup = Event.query.filter(Event.lead_id==lead.id, Event.event_type=='message_received').order_by(Event.timestamp.desc()).limit(50).all()
-                if any((e.meta_json or {}).get('provider_message_id') == pmid for e in dup):
+                if any((e.meta_json or {}).get('provider_message_id') == pmid or (e.meta_json or {}).get('unipile_message_id') == m.get('id') for e in dup):
                     continue
                 # Create event and mark responded
                 ev = Event(
                     lead_id=lead.id,
                     event_type='message_received',
-                    meta_json={'provider_message_id': pmid, 'message_data': m}
+                    meta_json={'provider_message_id': pmid, 'unipile_message_id': m.get('id'), 'message_data': m}
                 )
                 db.session.add(ev)
                 lead.status = 'responded'

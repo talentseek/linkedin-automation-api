@@ -228,7 +228,7 @@ def handle_message_received_event(payload):
         chat_obj = payload.get('chat') or {}
         attendees = payload.get('attendees') or chat_obj.get('attendees') or chat_obj.get('participants') or []
 
-        account_id = account_info.get('account_id')
+        account_id = account_info.get('account_id') or payload.get('account_id')
         if not account_id:
             logger.error("No account_id in message_received webhook")
             return jsonify({'error': 'Missing account_id'}), 400
@@ -241,13 +241,32 @@ def handle_message_received_event(payload):
 
         # Preferred fields from message object
         unipile_message_id = message_obj.get('id')
-        chat_id = message_obj.get('chat_id') or chat_obj.get('id')
+        chat_id = message_obj.get('chat_id') or chat_obj.get('id') or payload.get('chat_id')
         is_sender = message_obj.get('is_sender')
         message_text = message_obj.get('text') or data_fallback.get('message')
         sender_id_preferred = message_obj.get('sender_id')
 
         # Our own user id (URN or provider id depending on Unipile)
         our_user_id = account_info.get('user_id') or account_info.get('provider_id')
+
+        # If Unipile sent a minimal payload (no message object) but provided chat_id, fetch recent messages
+        if (not message_obj or not message_obj.get('id')) and chat_id:
+            try:
+                from src.services.unipile_client import UnipileClient
+                unip = UnipileClient()
+                msg_resp = unip.get_chat_messages(chat_id, limit=10)
+                items = (msg_resp or {}).get('items', [])
+                # Pick the most recent inbound message
+                for m in items:
+                    if isinstance(m, dict) and m.get('is_sender') is False:
+                        message_obj = m
+                        unipile_message_id = m.get('id')
+                        is_sender = m.get('is_sender')
+                        message_text = m.get('text')
+                        sender_id_preferred = m.get('sender_id') or sender_id_preferred
+                        break
+            except Exception as e:
+                logger.debug(f"Failed to fetch messages for chat {chat_id}: {str(e)}")
 
         # Fallback sender extraction from data shape
         sender = data_fallback.get('sender') or {}

@@ -86,9 +86,14 @@ def handle_messaging_webhook():
         # Get raw payload for signature verification
         payload_body = request.get_data()
         signature_header = request.headers.get('X-Unipile-Signature')
-        shared_secret_header = request.headers.get('X-Unipile-Secret') or request.headers.get('X-Webhook-Secret')
+        # Accept multiple secret header names for flexibility
+        shared_secret_header = (
+            request.headers.get('X-Unipile-Secret')
+            or request.headers.get('X-Webhook-Secret')
+            or request.headers.get('Unipile-Auth')
+        )
         secret = current_app.config.get('UNIPILE_WEBHOOK_SECRET')
-        
+
         # Verify webhook signature when configured; accept shared-secret header as fallback
         if secret:
             verified = False
@@ -97,32 +102,32 @@ def handle_messaging_webhook():
             elif shared_secret_header and shared_secret_header == secret:
                 verified = True
             else:
-                # Allow without signature to ensure delivery; log for observability
-                logger.warning("No signature header present; accepting messaging webhook without signature verification")
+                # To avoid delivery interruptions in production, allow and log
+                logger.warning("No valid signature header present; accepting messaging webhook without signature verification")
                 verified = True
             if not verified:
                 logger.warning("Invalid webhook signature for messaging webhook")
                 return jsonify({'error': 'Invalid signature'}), 401
-        
+
         # Parse JSON payload
         try:
             payload = request.get_json()
         except Exception as e:
             logger.error(f"Error parsing webhook JSON: {str(e)}")
             return jsonify({'error': 'Invalid JSON'}), 400
-        
+
         if not payload:
             return jsonify({'error': 'Empty payload'}), 400
-        
+
         event_type = payload.get('type') or payload.get('event') or (payload.get('data') or {}).get('event_type')
         logger.info(f"Received messaging webhook: {event_type}")
-        
+
         if str(event_type).lower() in ('message_received', 'message', 'message_new'):
             return handle_message_received_event(payload)
         else:
             logger.info(f"Unhandled messaging webhook event type: {event_type}")
             return jsonify({'message': 'Event received but not processed'}), 200
-        
+
     except Exception as e:
         logger.error(f"Error handling messaging webhook: {str(e)}")
         return jsonify({'error': 'Internal server error'}), 500
@@ -209,61 +214,110 @@ def handle_new_relation_event(payload):
 def handle_message_received_event(payload):
     """
     Handle message_received webhook event (reply received).
-    
-    This event is triggered when someone replies to a message.
+
+    Supports both documented Unipile shapes:
+      - payload.message + payload.chat + payload.account_info (+ attendees)
+      - payload.data + payload.account_info
     """
     try:
+        from src.services.unipile_client import UnipileClient
+
         account_info = payload.get('account_info') or payload.get('account') or {}
-        message_data = payload.get('data') or payload.get('message') or {}
-        
+        message_obj = payload.get('message') or {}
+        data_fallback = payload.get('data') or {}
+        chat_obj = payload.get('chat') or {}
+        attendees = payload.get('attendees') or chat_obj.get('attendees') or chat_obj.get('participants') or []
+
         account_id = account_info.get('account_id')
         if not account_id:
             logger.error("No account_id in message_received webhook")
             return jsonify({'error': 'Missing account_id'}), 400
-        
+
         # Find the LinkedIn account
         linkedin_account = LinkedInAccount.query.filter_by(account_id=account_id).first()
         if not linkedin_account:
             logger.warning(f"LinkedIn account not found for account_id: {account_id}")
             return jsonify({'message': 'Account not found'}), 200
-        
-        # Extract sender information
-        sender = message_data.get('sender') or {}
-        sender_provider_id = sender.get('attendee_provider_id') or sender.get('provider_id') or sender.get('id')
-        
-        # Check if this is an incoming message (not sent by our account)
+
+        # Preferred fields from message object
+        unipile_message_id = message_obj.get('id')
+        chat_id = message_obj.get('chat_id') or chat_obj.get('id')
+        is_sender = message_obj.get('is_sender')
+        message_text = message_obj.get('text') or data_fallback.get('message')
+        sender_id_preferred = message_obj.get('sender_id')
+
+        # Our own user id (URN or provider id depending on Unipile)
         our_user_id = account_info.get('user_id') or account_info.get('provider_id')
-        if our_user_id and sender_provider_id == our_user_id:
-            # This is a message sent by our account, ignore it
-            logger.debug("Ignoring outgoing message webhook")
+
+        # Fallback sender extraction from data shape
+        sender = data_fallback.get('sender') or {}
+        sender_provider_id = (
+            sender.get('attendee_provider_id')
+            or sender.get('provider_id')
+            or sender.get('id')
+            or sender_id_preferred
+        )
+
+        # Direction detection: prefer is_sender when available
+        if is_sender is True:
+            logger.debug("Ignoring outgoing message webhook (is_sender=True)")
             return jsonify({'message': 'Outgoing message ignored'}), 200
-        
+        if is_sender is None and our_user_id and sender_provider_id and str(sender_provider_id) == str(our_user_id):
+            logger.debug("Ignoring outgoing message webhook (sender matches our account)")
+            return jsonify({'message': 'Outgoing message ignored'}), 200
+
+        # If still missing a sender id, try to pick from attendees (the one that is not our user)
+        if not sender_provider_id and attendees:
+            for a in attendees:
+                cand = a.get('attendee_provider_id') or a.get('provider_id') or a.get('id')
+                if cand and (not our_user_id or str(cand) != str(our_user_id)):
+                    sender_provider_id = cand
+                    break
+
         if not sender_provider_id:
-            logger.error("No sender provider_id in message_received webhook")
+            logger.error("No sender provider identifier found in webhook (sender_id/attendees missing)")
             return jsonify({'error': 'Missing sender provider_id'}), 400
-        
-        # Find the lead with this provider_id
+
+        # Try to resolve the lead by matching any of the candidate identifiers
         lead = Lead.query.filter_by(provider_id=sender_provider_id).first()
+
+        # If identifier is a URN (e.g., urn:li:member:123) or numeric, attempt to resolve to provider_id
+        if not lead and (str(sender_provider_id).startswith('urn:li:member:') or str(sender_provider_id).isdigit()):
+            try:
+                unipile = UnipileClient()
+                prof = unipile.get_user_profile(identifier=sender_provider_id, account_id=account_id)
+                resolved_pid = prof.get('provider_id') or prof.get('member_id')
+                if resolved_pid:
+                    lead = Lead.query.filter_by(provider_id=resolved_pid).first()
+            except Exception as e:
+                logger.debug(f"Profile resolve failed for {sender_provider_id}: {str(e)}")
+
         if not lead:
-            logger.info(f"No lead found for sender provider_id: {sender_provider_id}")
-            # This might be a message from someone not in our campaigns
+            logger.info(f"No lead found for sender identifier: {sender_provider_id}")
             return jsonify({'message': 'Lead not found'}), 200
-        
-        # Idempotency: skip if we've already processed this provider_message_id/message_id
+
+        # Idempotency: prefer Unipile message.id, fallback to provider_message_id/message_id
+        provider_message_id = (
+            message_obj.get('provider_id')
+            if isinstance(message_obj, dict) else None
+        ) or data_fallback.get('provider_message_id') or data_fallback.get('message_id')
+
         try:
-            provider_message_id = message_data.get('provider_message_id') or message_data.get('message_id')
-            if provider_message_id:
-                existing = (
-                    Event.query
-                    .filter(Event.event_type == 'message_received', Event.lead_id == (lead.id if lead else None))
-                    .order_by(Event.timestamp.desc())
-                    .limit(25)
-                    .all()
-                )
-                for ev in existing:
-                    if (ev.meta_json or {}).get('provider_message_id') == provider_message_id:
-                        logger.info("Duplicate message_received ignored (same message_id)")
-                        return jsonify({'message': 'Duplicate ignored'}), 200
+            existing = (
+                Event.query
+                .filter(Event.event_type == 'message_received', Event.lead_id == lead.id)
+                .order_by(Event.timestamp.desc())
+                .limit(50)
+                .all()
+            )
+            for ev in existing:
+                mj = ev.meta_json or {}
+                if unipile_message_id and mj.get('unipile_message_id') == unipile_message_id:
+                    logger.info("Duplicate message_received ignored (same unipile_message_id)")
+                    return jsonify({'message': 'Duplicate ignored'}), 200
+                if provider_message_id and mj.get('provider_message_id') == provider_message_id:
+                    logger.info("Duplicate message_received ignored (same provider_message_id)")
+                    return jsonify({'message': 'Duplicate ignored'}), 200
         except Exception:
             pass
 
@@ -271,7 +325,7 @@ def handle_message_received_event(payload):
         if lead.status not in ['responded', 'completed']:
             old_status = lead.status
             lead.status = 'responded'
-            
+
             # Create event record
             event = Event(
                 lead_id=lead.id,
@@ -279,26 +333,35 @@ def handle_message_received_event(payload):
                 meta_json={
                     'sender_provider_id': sender_provider_id,
                     'account_id': account_id,
-                    'message_data': message_data,
-                    'provider_message_id': message_data.get('provider_message_id') or message_data.get('message_id'),
+                    'message_data': message_obj or data_fallback,
+                    'message_text': message_text,
+                    'unipile_message_id': unipile_message_id,
+                    'provider_message_id': provider_message_id,
+                    'chat_id': chat_id,
+                    'is_sender': is_sender,
                     'webhook_payload': payload,
                     'previous_status': old_status
                 }
             )
-            
+
             db.session.add(event)
             db.session.commit()
-            
+
             # Use sequence engine to process reply
             sequence_engine = get_outreach_scheduler()._get_sequence_engine()
             sequence_engine.process_lead_replied(lead)
-            
+
             logger.info(f"Lead {lead.id} replied - status updated from {old_status} to responded")
-            
+
             # Send notification via Resend (if configured)
             try:
                 from src.services.notifications import notify_lead_replied
-                notify_lead_replied(lead, lead.campaign, message_preview=(message_data.get('message') if isinstance(message_data, dict) else None))
+                preview = None
+                if isinstance(message_obj, dict):
+                    preview = message_obj.get('text')
+                elif isinstance(data_fallback, dict):
+                    preview = data_fallback.get('message')
+                notify_lead_replied(lead, lead.campaign, message_preview=preview)
             except Exception:
                 pass
 
@@ -311,7 +374,7 @@ def handle_message_received_event(payload):
         else:
             logger.info(f"Lead {lead.id} replied but status was already {lead.status}")
             return jsonify({'message': 'Reply received but lead status unchanged'}), 200
-        
+
     except Exception as e:
         db.session.rollback()
         logger.error(f"Error handling message_received event: {str(e)}")
@@ -650,7 +713,8 @@ def register_webhook():
         webhook_url = data.get('webhook_url')
         source = (data.get('source') or 'users').strip()
         name = data.get('name') or ("LinkedIn Connection Monitor" if source == 'users' else "Messaging Webhook")
-        secret = data.get('secret')
+        # Prefer explicit secret in body; otherwise default to configured secret
+        secret = data.get('secret') or current_app.config.get('UNIPILE_WEBHOOK_SECRET')
         events = data.get('events')
         
         if not webhook_url:

@@ -13,6 +13,54 @@ lead_bp = Blueprint('lead', __name__)
 logger = logging.getLogger(__name__)
 
 
+def _extract_company_name_from_profile(profile: dict) -> str:
+    """Best-effort company extraction from a profile dict.
+    Prefers explicit fields, then current_positions, then parses headline.
+    """
+    try:
+        if not isinstance(profile, dict):
+            return None
+        # 1) Explicit company fields
+        for key in ('company_name', 'company', 'organization', 'org_name'):
+            val = profile.get(key)
+            if isinstance(val, str) and val.strip():
+                return val.strip()
+        # 2) Current positions
+        positions = profile.get('current_positions') or profile.get('positions') or []
+        if isinstance(positions, list):
+            for pos in positions:
+                if not isinstance(pos, dict):
+                    continue
+                for key in ('company', 'company_name', 'organization', 'org_name'):
+                    val = pos.get(key)
+                    if isinstance(val, str) and val.strip():
+                        return val.strip()
+        # 3) Headline parsing patterns: " ... at Company ..." or "... @Company ..."
+        headline = profile.get('headline')
+        if isinstance(headline, str) and headline.strip():
+            text = headline.strip()
+            # Prefer substring after ' at ' or '@'
+            candidate = None
+            lowered = text.lower()
+            if ' at ' in lowered:
+                idx = lowered.find(' at ')
+                candidate = text[idx + 4:]
+            elif '@' in text:
+                idx = text.find('@')
+                candidate = text[idx + 1:]
+            if candidate:
+                # Stop at common separators
+                for sep in [' | ', ' — ', ' – ', ' - ', ',', '  ']:
+                    if sep in candidate:
+                        candidate = candidate.split(sep, 1)[0]
+                cleaned = candidate.strip().strip('|').strip('-').strip('—').strip('–').strip()
+                # Avoid overly generic phrases
+                if cleaned and len(cleaned) >= 2:
+                    return cleaned
+        return None
+    except Exception:
+        return None
+
 @lead_bp.route('/campaigns/<campaign_id>/leads', methods=['POST'])
 @jwt_required()
 def create_lead(campaign_id):
@@ -389,10 +437,8 @@ def import_leads_from_sales_navigator_url(campaign_id):
                     except Exception:
                         provider_id = None
 
-                # Company name fallback: prefer explicit field, else headline
-                company_name = profile.get('company_name')
-                if not company_name:
-                    company_name = profile.get('headline') or None
+                # Safe company extraction
+                company_name = _extract_company_name_from_profile(profile) or profile.get('company_name') or None
 
                 # Create new lead
                 lead = Lead(
@@ -1644,8 +1690,8 @@ def import_first_level_connections(campaign_id):
                 first_name = connection.get('first_name', '')
                 last_name = connection.get('last_name', '')
                 headline = connection.get('headline', '')
-                # Note: get_relations doesn't return company/location, these would need to be fetched separately
-                company = ''
+                # Note: get_relations doesn't return company/location, try to infer from headline
+                company = _extract_company_name_from_profile({'headline': headline}) or ''
                 location = ''
                 
                 # Skip if no public identifier

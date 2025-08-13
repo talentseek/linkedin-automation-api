@@ -154,10 +154,21 @@ class SequenceEngine:
             logger.info(f"Formatting message for lead {lead.id}: {lead.first_name} {lead.last_name} at {lead.company_name}")
             logger.info(f"Original message: {message}")
             
-            # Replace placeholders with actual data
+            # Replace placeholders with actual data, using safe company fallback
+            company_safe = None
+            try:
+                if lead.company_name and isinstance(lead.company_name, str) and lead.company_name.strip():
+                    company_safe = lead.company_name.strip()
+                else:
+                    # Try to infer from a headline-like value mistakenly stored in company_name
+                    from src.routes.lead import _extract_company_name_from_profile
+                    company_safe = _extract_company_name_from_profile({'headline': lead.company_name}) or 'your company'
+            except Exception:
+                company_safe = 'your company'
+
             formatted = message.replace('{first_name}', lead.first_name or 'there')
             formatted = formatted.replace('{last_name}', lead.last_name or '')
-            formatted = formatted.replace('{company}', lead.company_name or 'your company')
+            formatted = formatted.replace('{company}', company_safe)
             # Note: title field doesn't exist in Lead model, so we'll skip it for now
             
             logger.info(f"Formatted message: {formatted}")

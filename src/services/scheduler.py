@@ -590,7 +590,8 @@ class OutreachScheduler:
                 is_first_level = bool(lead.meta_json and lead.meta_json.get('source') == 'first_level_connections')
             except Exception:
                 is_first_level = False
-            if is_first_level and next_step.get('action_type') == 'message' and lead.status == 'connected':
+            if next_step.get('action_type') == 'message' and lead.status == 'connected':
+                # Allow immediate messaging for any newly connected lead (first-level or not)
                 return True
             
             # For messages, check if enough time has passed since the last action

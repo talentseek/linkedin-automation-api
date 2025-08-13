@@ -326,11 +326,20 @@ class OutreachScheduler:
             logger.error(f"Error scheduling/executing step for lead {lead_id}: {str(e)}")
     
     def execute_lead_step(self, lead_id, linkedin_account_id):
-        """Execute a step for a specific lead."""
+        """Execute a step for a specific lead with basic locking and idempotency safeguards."""
         try:
             with self.app.app_context():
-                # Get the lead
-                lead = Lead.query.get(lead_id)
+                # Attempt to lock the lead row to prevent concurrent execution on the same lead
+                try:
+                    lead = (
+                        db.session.query(Lead)
+                        .filter(Lead.id == lead_id)
+                        .with_for_update()
+                        .one_or_none()
+                    )
+                except Exception:
+                    # Fallback for databases that don't support row-level locking
+                    lead = Lead.query.get(lead_id)
                 if not lead:
                     logger.error(f"Lead {lead_id} not found")
                     return
@@ -346,7 +355,7 @@ class OutreachScheduler:
                     logger.info(f"Campaign {lead.campaign.id} is not active, skipping lead {lead_id}")
                     return
                 
-                # Get next step
+                # Determine next step (after lock)
                 next_step = self._get_sequence_engine().get_next_step_for_lead(lead)
                 if not next_step:
                     logger.info(f"No next step for lead {lead_id}")
@@ -357,6 +366,31 @@ class OutreachScheduler:
                 if not can_execute['can_execute']:
                     logger.info(f"Cannot execute step for lead {lead_id}: {can_execute['reason']}")
                     return
+                
+                # Idempotency: suppress duplicate sends within a short window
+                try:
+                    recent_window = datetime.utcnow() - timedelta(minutes=10)
+                    if next_step.get('action_type') == 'message':
+                        recent = (
+                            db.session.query(Event)
+                            .filter(Event.lead_id == lead.id, Event.event_type == 'message_sent', Event.timestamp >= recent_window)
+                            .first()
+                        )
+                        if recent:
+                            logger.warning(f"Idempotency: recent message_sent found for lead {lead_id}; skipping resend")
+                            return
+                    elif next_step.get('action_type') == 'connection_request':
+                        recent = (
+                            db.session.query(Event)
+                            .filter(Event.lead_id == lead.id, Event.event_type == 'connection_request_sent', Event.timestamp >= recent_window)
+                            .first()
+                        )
+                        if recent:
+                            logger.warning(f"Idempotency: recent connection_request_sent found for lead {lead_id}; skipping resend")
+                            return
+                except Exception as _:
+                    # Best-effort: do not block execution if idempotency check fails
+                    pass
                 
                 # Execute the step
                 result = self._get_sequence_engine().execute_step(lead, next_step, linkedin_account)

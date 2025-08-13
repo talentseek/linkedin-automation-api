@@ -1328,6 +1328,118 @@ def get_search_helper_info():
     }), 200
 
 
+@lead_bp.route('/campaigns/<campaign_id>/leads/enrich-company', methods=['POST'])
+@jwt_required()
+def enrich_company_names(campaign_id):
+    """Enrich company_name for leads by fetching profiles from Unipile.
+    Body JSON:
+      - account_id: LinkedInAccount DB id (preferred) or provider account_id
+      - max_leads: optional cap to limit processed leads (default 100)
+    """
+    try:
+        data = request.get_json() or {}
+        account_id = data.get('account_id')
+        max_leads = int(data.get('max_leads', 100))
+
+        # Verify campaign exists
+        campaign = Campaign.query.get(campaign_id)
+        if not campaign:
+            return jsonify({'error': 'Campaign not found'}), 404
+
+        # Resolve LinkedIn account (DB id or provider account_id)
+        linkedin_account = None
+        if account_id:
+            linkedin_account = LinkedInAccount.query.filter_by(id=account_id).first()
+            if not linkedin_account:
+                linkedin_account = LinkedInAccount.query.filter_by(account_id=account_id).first()
+        if not linkedin_account:
+            # Fallback: any connected account for this client
+            linkedin_account = LinkedInAccount.query.filter_by(client_id=campaign.client_id, status='connected').first()
+        if not linkedin_account:
+            return jsonify({'error': 'No connected LinkedIn account available'}), 404
+
+        def needs_enrichment(company: str) -> bool:
+            if not isinstance(company, str) or not company.strip():
+                return True
+            text = company.strip()
+            lower = text.lower()
+            # Heuristics: contains role separators or looks like headline
+            if ' at ' in lower or '@' in text:
+                return True
+            for sep in [' | ', ' — ', ' – ']:
+                if sep in text:
+                    return True
+            # If too long and contains many words, likely headline
+            if len(text) > 60 and len(text.split()) >= 6:
+                return True
+            return False
+
+        def extract_company_from_profile(profile: dict) -> str:
+            # Prefer current positions
+            try:
+                if not isinstance(profile, dict):
+                    return None
+                positions = profile.get('current_positions') or profile.get('positions') or []
+                if isinstance(positions, list):
+                    for pos in positions:
+                        if not isinstance(pos, dict):
+                            continue
+                        for key in ('company', 'company_name', 'organization', 'org_name'):
+                            val = pos.get(key)
+                            if isinstance(val, str) and val.strip():
+                                return val.strip()
+                # Fallback explicit field
+                for key in ('company_name', 'company', 'organization', 'org_name'):
+                    val = profile.get(key)
+                    if isinstance(val, str) and val.strip():
+                        return val.strip()
+            except Exception:
+                pass
+            return None
+
+        # Select candidate leads
+        candidates = []
+        leads = Lead.query.filter_by(campaign_id=campaign_id).all()
+        for lead in leads:
+            if needs_enrichment(lead.company_name):
+                candidates.append(lead)
+                if len(candidates) >= max_leads:
+                    break
+
+        if not candidates:
+            return jsonify({'message': 'No leads require enrichment', 'processed': 0, 'updated': 0}), 200
+
+        from src.services.unipile_client import UnipileClient
+        unipile = UnipileClient()
+
+        updated = 0
+        results = []
+        for lead in candidates:
+            try:
+                identifier = lead.public_identifier or lead.provider_id
+                if not identifier:
+                    results.append({'lead_id': lead.id, 'status': 'skipped', 'reason': 'no identifier'})
+                    continue
+                prof = unipile.get_user_profile(identifier=identifier, account_id=linkedin_account.account_id)
+                company = extract_company_from_profile(prof) or _extract_company_name_from_profile({'headline': prof.get('headline')})
+                if company and company != lead.company_name:
+                    lead.company_name = company
+                    updated += 1
+                    results.append({'lead_id': lead.id, 'status': 'updated', 'company': company})
+                else:
+                    results.append({'lead_id': lead.id, 'status': 'no_change'})
+            except Exception as e:
+                results.append({'lead_id': lead.id, 'status': 'error', 'error': str(e)})
+
+        db.session.commit()
+
+        return jsonify({'message': 'Enrichment completed', 'processed': len(candidates), 'updated': updated, 'results': results[:25]}), 200
+
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error enriching company names: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
 @lead_bp.route('/campaigns/<campaign_id>/leads/merge-duplicates', methods=['POST'])
 @jwt_required()
 def merge_duplicate_leads(campaign_id):

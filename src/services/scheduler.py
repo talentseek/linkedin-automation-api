@@ -609,6 +609,10 @@ class OutreachScheduler:
         """Execute a step for a specific lead with basic locking and idempotency safeguards."""
         try:
             with self.app.app_context():
+                logger.info(f"=== EXECUTE LEAD STEP DEBUG START ===")
+                logger.info(f"Processing lead_id: {lead_id}")
+                logger.info(f"LinkedIn account_id: {linkedin_account_id}")
+                
                 # Attempt to lock the lead row to prevent concurrent execution on the same lead
                 try:
                     lead = (
@@ -623,6 +627,9 @@ class OutreachScheduler:
                 if not lead:
                     logger.error(f"Lead {lead_id} not found")
                     return
+                
+                logger.info(f"Retrieved lead: ID={lead.id}, first_name='{lead.first_name}', last_name='{lead.last_name}', status='{lead.status}'")
+                logger.info(f"=== EXECUTE LEAD STEP DEBUG END ===")
                 
                 # Get the LinkedIn account
                 linkedin_account = LinkedInAccount.query.get(linkedin_account_id)

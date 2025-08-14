@@ -176,9 +176,15 @@ class SequenceEngine:
     def _format_message(self, message: str, lead: Lead) -> str:
         """Format a message with lead data."""
         try:
-            logger.info(f"Formatting message for lead {lead.id}: {lead.first_name} {lead.last_name} at {lead.company_name}")
-            logger.info(f"Original message: {message}")
-            logger.info(f"Lead company_name field: '{lead.company_name}'")
+            logger.info(f"=== PERSONALIZATION DEBUG START ===")
+            logger.info(f"Lead ID: {lead.id}")
+            logger.info(f"Lead first_name: '{lead.first_name}'")
+            logger.info(f"Lead last_name: '{lead.last_name}'")
+            logger.info(f"Lead company_name: '{lead.company_name}'")
+            logger.info(f"Lead status: '{lead.status}'")
+            logger.info(f"Lead current_step: {lead.current_step}")
+            logger.info(f"Original message: '{message}'")
+            logger.info(f"=== PERSONALIZATION DEBUG END ===")
             
             # Replace placeholders with actual data, using safe company fallback
             company_safe = None
@@ -198,7 +204,7 @@ class SequenceEngine:
             formatted = formatted.replace('{{company_name}}', company_safe)  # Also handle company_name variant
             # Note: title field doesn't exist in Lead model, so we'll skip it for now
             
-            logger.info(f"Formatted message: {formatted}")
+            logger.info(f"Formatted message: '{formatted}'")
             return formatted
         except Exception as e:
             logger.error(f"Error formatting message: {str(e)}")

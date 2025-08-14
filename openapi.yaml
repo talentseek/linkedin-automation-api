@@ -1,0 +1,1321 @@
+openapi: 3.0.3
+info:
+  title: LinkedIn Automation API
+  description: |
+    API for automating LinkedIn outreach campaigns with multi-tenant support.
+    
+    ## Key Features
+    - Multi-tenant client management
+    - LinkedIn account integration via Unipile
+    - Automated outreach sequences
+    - Real-time webhook processing
+    - Lead management and import
+    - Analytics and reporting
+    
+    ## Authentication
+    JWT authentication is currently disabled for development. All endpoints are publicly accessible.
+    
+    ## Base URL
+    Production: https://linkedin-automation-api.fly.dev
+    Development: http://localhost:5001
+    
+  version: 1.0.0
+  contact:
+    name: LinkedIn Automation API
+    url: https://github.com/talentseek/linkedin-automation-api
+
+servers:
+  - url: https://linkedin-automation-api.fly.dev
+    description: Production server
+  - url: http://localhost:5001
+    description: Development server
+
+paths:
+  # =============================================================================
+  # AUTHENTICATION ENDPOINTS
+  # =============================================================================
+  
+  /api/auth/login:
+    post:
+      summary: User login
+      description: Authenticate user and return JWT token
+      tags: [Authentication]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                username:
+                  type: string
+                password:
+                  type: string
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token:
+                    type: string
+                  refresh_token:
+                    type: string
+
+  /api/auth/verify:
+    get:
+      summary: Verify JWT token
+      description: Verify if the current JWT token is valid
+      tags: [Authentication]
+      responses:
+        '200':
+          description: Token is valid
+        '401':
+          description: Token is invalid
+
+  /api/auth/refresh:
+    post:
+      summary: Refresh JWT token
+      description: Get a new JWT token using refresh token
+      tags: [Authentication]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                refresh_token:
+                  type: string
+      responses:
+        '200':
+          description: Token refreshed successfully
+
+  # =============================================================================
+  # CLIENT MANAGEMENT
+  # =============================================================================
+  
+  /api/clients/clients:
+    get:
+      summary: Get all clients
+      description: Retrieve all clients in the system
+      tags: [Clients]
+      responses:
+        '200':
+          description: List of clients
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  clients:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Client'
+    
+    post:
+      summary: Create a new client
+      description: Create a new client account
+      tags: [Clients]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+              properties:
+                name:
+                  type: string
+                  description: Client name
+      responses:
+        '201':
+          description: Client created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  client:
+                    $ref: '#/components/schemas/Client'
+
+  /api/clients/clients/{client_id}:
+    get:
+      summary: Get client by ID
+      description: Retrieve a specific client by ID
+      tags: [Clients]
+      parameters:
+        - name: client_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Client details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  client:
+                    $ref: '#/components/schemas/Client'
+    
+    put:
+      summary: Update client
+      description: Update client information
+      tags: [Clients]
+      parameters:
+        - name: client_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+      responses:
+        '200':
+          description: Client updated successfully
+    
+    delete:
+      summary: Delete client
+      description: Delete a client and all associated data
+      tags: [Clients]
+      parameters:
+        - name: client_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Client deleted successfully
+
+  # =============================================================================
+  # LINKEDIN ACCOUNT MANAGEMENT
+  # =============================================================================
+  
+  /api/linkedin-accounts/clients/{client_id}/linkedin-accounts:
+    get:
+      summary: Get LinkedIn accounts for client
+      description: Retrieve all LinkedIn accounts associated with a client
+      tags: [LinkedIn Accounts]
+      parameters:
+        - name: client_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of LinkedIn accounts
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  linkedin_accounts:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/LinkedInAccount'
+    
+    post:
+      summary: Add LinkedIn account to client
+      description: Connect a LinkedIn account to a client
+      tags: [LinkedIn Accounts]
+      parameters:
+        - name: client_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - account_id
+              properties:
+                account_id:
+                  type: string
+                  description: Unipile account ID
+      responses:
+        '201':
+          description: LinkedIn account added successfully
+
+  /api/linkedin-accounts/linkedin-accounts/{account_id}:
+    get:
+      summary: Get LinkedIn account details
+      description: Retrieve details of a specific LinkedIn account
+      tags: [LinkedIn Accounts]
+      parameters:
+        - name: account_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: LinkedIn account details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  linkedin_account:
+                    $ref: '#/components/schemas/LinkedInAccount'
+    
+    put:
+      summary: Update LinkedIn account
+      description: Update LinkedIn account status or settings
+      tags: [LinkedIn Accounts]
+      parameters:
+        - name: account_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                status:
+                  type: string
+                  enum: [pending, connected, disconnected]
+      responses:
+        '200':
+          description: LinkedIn account updated successfully
+    
+    delete:
+      summary: Remove LinkedIn account
+      description: Remove a LinkedIn account from the system
+      tags: [LinkedIn Accounts]
+      parameters:
+        - name: account_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: LinkedIn account removed successfully
+
+  # =============================================================================
+  # CAMPAIGN MANAGEMENT
+  # =============================================================================
+  
+  /api/campaigns/clients/{client_id}/campaigns:
+    get:
+      summary: Get campaigns for client
+      description: Retrieve all campaigns for a specific client
+      tags: [Campaigns]
+      parameters:
+        - name: client_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of campaigns
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  campaigns:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Campaign'
+    
+    post:
+      summary: Create new campaign
+      description: Create a new outreach campaign for a client
+      tags: [Campaigns]
+      parameters:
+        - name: client_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+              properties:
+                name:
+                  type: string
+                  description: Campaign name
+                timezone:
+                  type: string
+                  default: UTC
+                status:
+                  type: string
+                  enum: [draft, active, paused, completed]
+                  default: draft
+      responses:
+        '201':
+          description: Campaign created successfully
+
+  /api/campaigns/campaigns/{campaign_id}:
+    get:
+      summary: Get campaign details
+      description: Retrieve details of a specific campaign
+      tags: [Campaigns]
+      parameters:
+        - name: campaign_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Campaign details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  campaign:
+                    $ref: '#/components/schemas/Campaign'
+    
+    put:
+      summary: Update campaign
+      description: Update campaign settings and status
+      tags: [Campaigns]
+      parameters:
+        - name: campaign_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                timezone:
+                  type: string
+                status:
+                  type: string
+                  enum: [draft, active, paused, completed]
+      responses:
+        '200':
+          description: Campaign updated successfully
+    
+    delete:
+      summary: Delete campaign
+      description: Delete a campaign and all associated leads
+      tags: [Campaigns]
+      parameters:
+        - name: campaign_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Campaign deleted successfully
+
+  /api/campaigns/campaigns/{campaign_id}/leads:
+    get:
+      summary: Get leads for campaign
+      description: Retrieve all leads associated with a campaign
+      tags: [Campaigns]
+      parameters:
+        - name: campaign_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of leads
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  leads:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Lead'
+                  total_count:
+                    type: integer
+
+  # =============================================================================
+  # LEAD MANAGEMENT
+  # =============================================================================
+  
+  /api/leads/campaigns/{campaign_id}/leads:
+    get:
+      summary: Get leads for campaign
+      description: Retrieve all leads for a campaign (same as campaign endpoint)
+      tags: [Leads]
+      parameters:
+        - name: campaign_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of leads
+    
+    post:
+      summary: Create new lead
+      description: Manually create a new lead for a campaign
+      tags: [Leads]
+      parameters:
+        - name: campaign_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - public_identifier
+              properties:
+                first_name:
+                  type: string
+                last_name:
+                  type: string
+                public_identifier:
+                  type: string
+                  description: LinkedIn public identifier
+                company_name:
+                  type: string
+      responses:
+        '201':
+          description: Lead created successfully
+
+  /api/leads/campaigns/{campaign_id}/leads/import:
+    post:
+      summary: Import leads from Sales Navigator URL
+      description: Import leads from a LinkedIn Sales Navigator search URL
+      tags: [Leads]
+      parameters:
+        - name: campaign_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - sales_navigator_url
+              properties:
+                sales_navigator_url:
+                  type: string
+                  description: LinkedIn Sales Navigator search URL
+                limit:
+                  type: integer
+                  default: 100
+                  description: Maximum number of leads to import
+      responses:
+        '200':
+          description: Leads imported successfully
+
+  /api/leads/campaigns/{campaign_id}/leads/smart-search:
+    post:
+      summary: Smart search and import leads
+      description: Search for leads using advanced criteria and import them
+      tags: [Leads]
+      parameters:
+        - name: campaign_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                keywords:
+                  type: string
+                location:
+                  type: string
+                industry:
+                  type: string
+                company_size:
+                  type: string
+                limit:
+                  type: integer
+                  default: 100
+      responses:
+        '200':
+          description: Search completed and leads imported
+
+  /api/leads/leads/{lead_id}:
+    get:
+      summary: Get lead details
+      description: Retrieve details of a specific lead
+      tags: [Leads]
+      parameters:
+        - name: lead_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Lead details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  lead:
+                    $ref: '#/components/schemas/Lead'
+    
+    put:
+      summary: Update lead
+      description: Update lead information
+      tags: [Leads]
+      parameters:
+        - name: lead_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                first_name:
+                  type: string
+                last_name:
+                  type: string
+                company_name:
+                  type: string
+                status:
+                  type: string
+                  enum: [pending_invite, invite_sent, connected, responded, completed, error]
+      responses:
+        '200':
+          description: Lead updated successfully
+    
+    delete:
+      summary: Delete lead
+      description: Remove a lead from the campaign
+      tags: [Leads]
+      parameters:
+        - name: lead_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Lead deleted successfully
+
+  # =============================================================================
+  # SEQUENCE MANAGEMENT
+  # =============================================================================
+  
+  /api/sequence/campaigns/{campaign_id}/sequence:
+    get:
+      summary: Get campaign sequence
+      description: Retrieve the outreach sequence for a campaign
+      tags: [Sequences]
+      parameters:
+        - name: campaign_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Campaign sequence
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  sequence:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/SequenceStep'
+    
+    put:
+      summary: Update campaign sequence
+      description: Set or update the outreach sequence for a campaign
+      tags: [Sequences]
+      parameters:
+        - name: campaign_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - sequence_json
+              properties:
+                sequence_json:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/SequenceStep'
+      responses:
+        '200':
+          description: Sequence updated successfully
+
+  /api/sequence/sequence/example:
+    get:
+      summary: Get example sequence
+      description: Retrieve an example outreach sequence
+      tags: [Sequences]
+      responses:
+        '200':
+          description: Example sequence
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  sequence:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/SequenceStep'
+
+  # =============================================================================
+  # AUTOMATION CONTROL
+  # =============================================================================
+  
+  /api/automation/campaigns/{campaign_id}/start:
+    post:
+      summary: Start campaign automation
+      description: Start the automated outreach for a campaign
+      tags: [Automation]
+      parameters:
+        - name: campaign_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Campaign automation started
+
+  /api/automation/campaigns/{campaign_id}/pause:
+    post:
+      summary: Pause campaign automation
+      description: Pause the automated outreach for a campaign
+      tags: [Automation]
+      parameters:
+        - name: campaign_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Campaign automation paused
+
+  /api/automation/campaigns/{campaign_id}/status:
+    get:
+      summary: Get campaign automation status
+      description: Check the current automation status for a campaign
+      tags: [Automation]
+      parameters:
+        - name: campaign_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Campaign automation status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum: [active, paused, stopped]
+
+  /api/automation/scheduler/status:
+    get:
+      summary: Get scheduler status
+      description: Check the status of the background automation scheduler
+      tags: [Automation]
+      responses:
+        '200':
+          description: Scheduler status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  running:
+                    type: boolean
+                  last_run:
+                    type: string
+                    format: date-time
+
+  /api/automation/scheduler/start:
+    post:
+      summary: Start scheduler
+      description: Start the background automation scheduler
+      tags: [Automation]
+      responses:
+        '200':
+          description: Scheduler started
+
+  /api/automation/scheduler/stop:
+    post:
+      summary: Stop scheduler
+      description: Stop the background automation scheduler
+      tags: [Automation]
+      responses:
+        '200':
+          description: Scheduler stopped
+
+  # =============================================================================
+  # WEBHOOK ENDPOINTS
+  # =============================================================================
+  
+  /api/webhooks/unipile/webhook:
+    post:
+      summary: Main Unipile webhook endpoint
+      description: Primary webhook endpoint for all Unipile events
+      tags: [Webhooks]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                event:
+                  type: string
+                  enum: [message_received, new_relation, message_read, account_status]
+      responses:
+        '200':
+          description: Webhook processed successfully
+
+  /api/webhooks/unipile/simple:
+    post:
+      summary: Simple webhook endpoint
+      description: Simplified webhook endpoint that captures all events and processes them
+      tags: [Webhooks]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Webhook processed successfully
+
+  /api/webhooks/webhook/health:
+    get:
+      summary: Webhook health check
+      description: Check the health of webhook endpoints
+      tags: [Webhooks]
+      responses:
+        '200':
+          description: Webhook endpoints are healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  endpoints:
+                    type: object
+
+  /api/webhooks/webhook/data:
+    get:
+      summary: Get webhook data
+      description: Retrieve stored webhook data for analysis
+      tags: [Webhooks]
+      responses:
+        '200':
+          description: Recent webhook data
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  webhooks:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/WebhookData'
+                  count:
+                    type: integer
+
+  /api/webhooks/status:
+    get:
+      summary: Get webhook status
+      description: Get status of leads and webhook events for a campaign
+      tags: [Webhooks]
+      parameters:
+        - name: campaign_id
+          in: query
+          schema:
+            type: string
+        - name: campaign_name
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Campaign status and recent events
+
+  # =============================================================================
+  # ANALYTICS ENDPOINTS
+  # =============================================================================
+  
+  /api/analytics/campaigns/{campaign_id}/summary:
+    get:
+      summary: Get campaign analytics summary
+      description: Retrieve analytics summary for a campaign
+      tags: [Analytics]
+      parameters:
+        - name: campaign_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Campaign analytics summary
+
+  /api/analytics/campaigns/{campaign_id}/timeseries:
+    get:
+      summary: Get campaign timeseries data
+      description: Retrieve timeseries analytics data for a campaign
+      tags: [Analytics]
+      parameters:
+        - name: campaign_id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: days
+          in: query
+          schema:
+            type: integer
+            default: 30
+      responses:
+        '200':
+          description: Campaign timeseries data
+
+  /api/analytics/accounts/{linkedin_account_id}/rate-usage:
+    get:
+      summary: Get rate usage for LinkedIn account
+      description: Retrieve rate limit usage for a specific LinkedIn account
+      tags: [Analytics]
+      parameters:
+        - name: linkedin_account_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Rate usage data
+
+  # =============================================================================
+  # UNIPILE AUTH ENDPOINTS
+  # =============================================================================
+  
+  /api/unipile-auth/clients/{client_id}/linkedin-auth:
+    post:
+      summary: Initiate LinkedIn authentication
+      description: Start the OAuth flow for connecting a LinkedIn account
+      tags: [Unipile Auth]
+      parameters:
+        - name: client_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Authentication URL generated
+
+  /api/unipile-auth/auth/unipile/callback/{client_id}:
+    get:
+      summary: OAuth callback
+      description: Handle OAuth callback from Unipile
+      tags: [Unipile Auth]
+      parameters:
+        - name: client_id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: code
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Authentication completed
+
+  # =============================================================================
+  # ADMIN ENDPOINTS
+  # =============================================================================
+  
+  /api/admin/migrations/status:
+    get:
+      summary: Get migration status
+      description: Check the status of database migrations
+      tags: [Admin]
+      responses:
+        '200':
+          description: Migration status
+
+  /api/admin/migrations/bootstrap:
+    post:
+      summary: Bootstrap migrations
+      description: Run database bootstrap migrations
+      tags: [Admin]
+      responses:
+        '200':
+          description: Migrations completed
+
+  # =============================================================================
+  # TEST/DEBUG ENDPOINTS (Consider removing in production)
+  # =============================================================================
+  
+  /api/webhooks/unipile/test:
+    post:
+      summary: Test webhook processing
+      description: Test endpoint that simulates message_received webhook
+      tags: [Test/Debug]
+      responses:
+        '200':
+          description: Test completed
+
+  /api/webhooks/unipile/test-connection:
+    post:
+      summary: Test connection detection
+      description: Test endpoint that simulates new_relation webhook
+      tags: [Test/Debug]
+      responses:
+        '200':
+          description: Test completed
+
+  /api/automation/test/process-leads:
+    post:
+      summary: Test lead processing
+      description: Test endpoint for processing leads
+      tags: [Test/Debug]
+      responses:
+        '200':
+          description: Test completed
+
+  /api/automation/test/sequence-debug:
+    post:
+      summary: Test sequence debugging
+      description: Test endpoint for sequence debugging
+      tags: [Test/Debug]
+      responses:
+        '200':
+          description: Test completed
+
+  /api/automation/test/ready-check:
+    post:
+      summary: Test lead readiness check
+      description: Test endpoint for checking if leads are ready for processing
+      tags: [Test/Debug]
+      responses:
+        '200':
+          description: Test completed
+
+  /api/automation/test/reset-leads:
+    post:
+      summary: Test lead reset
+      description: Test endpoint for resetting lead status
+      tags: [Test/Debug]
+      responses:
+        '200':
+          description: Test completed
+
+  /api/automation/test/format-message:
+    post:
+      summary: Test message formatting
+      description: Test endpoint for message personalization
+      tags: [Test/Debug]
+      responses:
+        '200':
+          description: Test completed
+
+  /api/webhooks/check-connections:
+    post:
+      summary: Debug connection checking
+      description: Debug endpoint for checking connections
+      tags: [Test/Debug]
+      responses:
+        '200':
+          description: Debug completed
+
+  /api/webhooks/debug-relations:
+    post:
+      summary: Debug relations API
+      description: Debug endpoint for Unipile relations API
+      tags: [Test/Debug]
+      responses:
+        '200':
+          description: Debug completed
+
+  /api/webhooks/debug-sent-invitations:
+    post:
+      summary: Debug sent invitations API
+      description: Debug endpoint for Unipile sent invitations API
+      tags: [Test/Debug]
+      responses:
+        '200':
+          description: Debug completed
+
+  /api/webhooks/list:
+    get:
+      summary: List webhooks
+      description: List all registered webhooks with Unipile
+      tags: [Test/Debug]
+      responses:
+        '200':
+          description: List of webhooks
+
+  /api/webhooks/register:
+    post:
+      summary: Register webhook
+      description: Register a new webhook with Unipile
+      tags: [Test/Debug]
+      responses:
+        '200':
+          description: Webhook registered
+
+  /api/webhooks/delete/{webhook_id}:
+    delete:
+      summary: Delete webhook
+      description: Delete a webhook from Unipile
+      tags: [Test/Debug]
+      parameters:
+        - name: webhook_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Webhook deleted
+
+  /api/webhooks/configure-unified:
+    post:
+      summary: Configure unified webhook
+      description: Configure the unified webhook endpoint
+      tags: [Test/Debug]
+      responses:
+        '200':
+          description: Webhook configured
+
+# =============================================================================
+# COMPONENTS
+# =============================================================================
+
+components:
+  schemas:
+    Client:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    LinkedInAccount:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        account_id:
+          type: string
+          description: Unipile account ID
+        status:
+          type: string
+          enum: [pending, connected, disconnected]
+        client_id:
+          type: string
+          format: uuid
+        connected_at:
+          type: string
+          format: date-time
+
+    Campaign:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        client_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [draft, active, paused, completed]
+        timezone:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        sequence_json:
+          type: array
+          items:
+            $ref: '#/components/schemas/SequenceStep'
+
+    Lead:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        first_name:
+          type: string
+        last_name:
+          type: string
+        company_name:
+          type: string
+        public_identifier:
+          type: string
+        provider_id:
+          type: string
+        status:
+          type: string
+          enum: [pending_invite, invite_sent, connected, responded, completed, error]
+        current_step:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+        last_step_sent_at:
+          type: string
+          format: date-time
+
+    SequenceStep:
+      type: object
+      properties:
+        step_order:
+          type: integer
+        action_type:
+          type: string
+          enum: [connection_request, message]
+        message:
+          type: string
+        delay_hours:
+          type: integer
+        name:
+          type: string
+
+    WebhookData:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        timestamp:
+          type: string
+          format: date-time
+        method:
+          type: string
+        url:
+          type: string
+        headers:
+          type: string
+        raw_data:
+          type: string
+        json_data:
+          type: string
+        content_type:
+          type: string
+        content_length:
+          type: integer
+
+  securitySchemes:
+    jwt:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+tags:
+  - name: Authentication
+    description: User authentication and authorization
+  - name: Clients
+    description: Multi-tenant client management
+  - name: LinkedIn Accounts
+    description: LinkedIn account integration and management
+  - name: Campaigns
+    description: Outreach campaign management
+  - name: Leads
+    description: Lead management and import
+  - name: Sequences
+    description: Outreach sequence management
+  - name: Automation
+    description: Campaign automation control
+  - name: Webhooks
+    description: Webhook processing and management
+  - name: Analytics
+    description: Analytics and reporting
+  - name: Unipile Auth
+    description: LinkedIn authentication via Unipile
+  - name: Admin
+    description: Administrative operations
+  - name: Test/Debug
+    description: Test and debug endpoints (consider removing in production)

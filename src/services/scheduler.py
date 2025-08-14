@@ -698,10 +698,12 @@ class OutreachScheduler:
                             logger.info(f"Recorded message for account {linkedin_account.account_id} (first_level={is_first_level})")
                         except Exception as _:
                             logger.warning("Failed to persist message usage; continuing")
-                        # Update lead status to messaged
+                        # Update lead status and current step
                         lead.status = 'messaged'
+                        lead.current_step = (lead.current_step or 0) + 1
+                        lead.last_step_sent_at = datetime.utcnow()
                         db.session.commit()
-                        logger.info(f"Updated lead {lead_id} status to messaged")
+                        logger.info(f"Updated lead {lead_id} status to messaged and current_step to {lead.current_step}")
                     
                     # Check if there are more steps in the sequence
                     next_next_step = self._get_sequence_engine().get_next_step_for_lead(lead)

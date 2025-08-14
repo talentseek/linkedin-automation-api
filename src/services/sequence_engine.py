@@ -178,6 +178,7 @@ class SequenceEngine:
         try:
             logger.info(f"Formatting message for lead {lead.id}: {lead.first_name} {lead.last_name} at {lead.company_name}")
             logger.info(f"Original message: {message}")
+            logger.info(f"Lead company_name field: '{lead.company_name}'")
             
             # Replace placeholders with actual data, using safe company fallback
             company_safe = None

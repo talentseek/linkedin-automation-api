@@ -37,12 +37,43 @@ def create_client():
 @client_bp.route('/clients', methods=['GET'])
 # @jwt_required()  # Temporarily removed for development
 def get_clients():
-    """Get all clients."""
+    """Get all clients with optional campaign inclusion."""
     try:
+        include_campaigns = request.args.get('include_campaigns', 'false').lower() == 'true'
+        
         clients = Client.query.all()
-        return jsonify({
-            'clients': [client.to_dict() for client in clients]
-        }), 200
+        
+        if include_campaigns:
+            # Import Campaign model here to avoid circular imports
+            from src.models.campaign import Campaign
+            
+            client_data = []
+            for client in clients:
+                client_dict = client.to_dict()
+                
+                # Get campaigns for this client
+                campaigns = Campaign.query.filter_by(client_id=client.id).all()
+                client_dict['campaigns'] = [
+                    {
+                        'id': campaign.id,
+                        'name': campaign.name,
+                        'status': campaign.status,
+                        'created_at': campaign.created_at.isoformat() if campaign.created_at else None
+                    }
+                    for campaign in campaigns
+                ]
+                
+                client_data.append(client_dict)
+            
+            return jsonify({
+                'clients': client_data
+            }), 200
+        else:
+            # Original behavior - just return clients without campaigns
+            return jsonify({
+                'clients': [client.to_dict() for client in clients]
+            }), 200
+            
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 

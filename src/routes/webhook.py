@@ -485,6 +485,116 @@ def handle_simple_webhook():
                 else:
                     logger.info("Simple webhook: No sender_provider_id found in webhook data")
             
+            elif event_type == 'message_edited':
+                logger.info("Simple webhook: Processing message_edited event")
+                
+                # STEP 2: Extract message data
+                account_id = json_data.get('account_id')
+                account_info = json_data.get('account_info', {})
+                sender = json_data.get('sender', {})
+                sender_provider_id = sender.get('attendee_provider_id')
+                message_text = json_data.get('message')
+                chat_id = json_data.get('chat_id')
+                
+                logger.info(f"Simple webhook: Message edited: account={account_id}, sender={sender_provider_id}, message={message_text}")
+                
+                # STEP 3A: Check if this is an accepted invitation (real-time connection detection)
+                # message_edited events often indicate connection acceptance when our invitation message appears in a new chat
+                our_user_id = account_info.get('user_id')
+                if sender_provider_id == our_user_id:
+                    logger.info(f"Simple webhook: Message edited from our account - potential connection acceptance: {sender_provider_id}")
+                    
+                    # Check if this looks like an invitation message (contains our standard invitation text)
+                    invitation_indicators = [
+                        "I work with CFOs to shorten budget cycles",
+                        "I work with distributors to automate order processing", 
+                        "thought it'd be useful to connect",
+                        "Would love to connect and share insights",
+                        "share a resource we've just launched"
+                    ]
+                    
+                    is_invitation_message = any(indicator.lower() in message_text.lower() for indicator in invitation_indicators)
+                    
+                    if is_invitation_message and chat_id:
+                        logger.info(f"Simple webhook: Connection acceptance detected via message_edited: chat_id={chat_id}")
+                        
+                        # Find lead by chat_id or by searching for leads with this message pattern
+                        # Since this is our message being edited, we need to find the lead differently
+                        from src.models import Lead
+                        
+                        # Try to find lead by matching the message content or by recent invite_sent status
+                        lead = None
+                        
+                        # Method 1: Look for leads with recent invite_sent status for this account
+                        # Find leads through campaign -> client -> linkedin_account relationship
+                        from src.models import Campaign, Client, LinkedInAccount
+                        
+                        # First find the LinkedIn account
+                        linkedin_account = LinkedInAccount.query.filter_by(
+                            account_id=account_id
+                        ).first()
+                        
+                        if linkedin_account:
+                            # Find campaigns for this client
+                            campaigns = Campaign.query.filter_by(
+                                client_id=linkedin_account.client_id
+                            ).all()
+                            
+                            campaign_ids = [c.id for c in campaigns]
+                            
+                            # Find recent leads with invite_sent status in these campaigns
+                            recent_leads = Lead.query.filter(
+                                Lead.campaign_id.in_(campaign_ids),
+                                Lead.status.in_(['invite_sent', 'invited'])
+                            ).order_by(Lead.created_at.desc()).limit(5).all()
+                        else:
+                            recent_leads = []
+                        
+                        for recent_lead in recent_leads:
+                            # Check if this lead's name might match the message recipient
+                            if recent_lead.first_name and recent_lead.first_name.lower() in message_text.lower():
+                                lead = recent_lead
+                                logger.info(f"Simple webhook: Found lead {lead.id} by name match: {recent_lead.first_name}")
+                                break
+                        
+                        # Method 2: If no name match, take the most recent invite_sent lead
+                        if not lead and recent_leads:
+                            lead = recent_leads[0]
+                            logger.info(f"Simple webhook: Using most recent invite_sent lead: {lead.id}")
+                        
+                        if lead and lead.status in ['invite_sent', 'invited']:
+                            logger.info(f"Simple webhook: Connection acceptance confirmed for lead {lead.id}")
+                            
+                            # Update lead status to connected
+                            lead.status = 'connected'
+                            lead.connected_at = datetime.utcnow()
+                            lead.conversation_id = chat_id
+                            
+                            # Create event record
+                            from src.models import Event
+                            event = Event(
+                                event_type='connection_accepted',
+                                lead_id=lead.id,
+                                meta_json={
+                                    'account_id': account_id,
+                                    'user_provider_id': sender_provider_id,
+                                    'detection_method': 'simple_webhook_message_edited',
+                                    'chat_id': chat_id,
+                                    'message_text': message_text,
+                                    'webhook_data_id': webhook_data.id
+                                }
+                            )
+                            
+                            db.session.add(event)
+                            db.session.commit()
+                            
+                            logger.info(f"Simple webhook: Updated lead {lead.id} status to connected via message_edited")
+                            return jsonify({'status': 'connection_accepted', 'id': webhook_data.id, 'event_type': event_type, 'lead_id': lead.id}), 200
+                        else:
+                            logger.info(f"Simple webhook: No matching lead found for message_edited connection detection")
+                else:
+                    logger.info(f"Simple webhook: Message edited from other account: {sender_provider_id}")
+            
             elif event_type == 'new_relation':
                 logger.info("Simple webhook: Processing new_relation event")
                 
@@ -1196,6 +1306,181 @@ def test_connection_detection():
         
     except Exception as e:
         logger.error(f"Test connection webhook error: {str(e)}")
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+
+@webhook_bp.route('/unipile/test-message-edited', methods=['POST'])
+def test_message_edited_webhook():
+    """Test endpoint that simulates a message_edited event for connection detection."""
+    try:
+        from src.models.webhook_data import WebhookData
+        import json
+        
+        # Simulate message_edited webhook data for Jonathan Young (connection acceptance)
+        test_data = {
+            "event": "message_edited",
+            "account_id": "FK8k_QrrTRGItKYf1IKrCQ",
+            "account_info": {
+                "user_id": "ACoAAACszi4BCTg_kyNtGOShVEPDJpgrqIw9uh4"
+            },
+            "sender": {
+                "attendee_provider_id": "ACoAAACszi4BCTg_kyNtGOShVEPDJpgrqIw9uh4"
+            },
+            "message": "Hi Jonathan, I work with CFOs to shorten budget cycles, stress-test cash, and benchmark against 2.9M+ UK/EU companies. Thought it'd be useful to connect and share a resource we've just launched.",
+            "chat_id": "GA-0_j2WU-SZ_1ZyIa7UmA"
+        }
+        
+        # Store in database (same as simple webhook)
+        webhook_data = WebhookData(
+            method="POST",
+            url="/api/webhooks/unipile/test-message-edited",
+            headers=json.dumps({"Content-Type": "application/json"}),
+            raw_data=json.dumps(test_data),
+            json_data=json.dumps(test_data),
+            content_type="application/json",
+            content_length=len(json.dumps(test_data))
+        )
+        
+        db.session.add(webhook_data)
+        db.session.commit()
+        
+        # Process the test data (same logic as simple webhook)
+        event_type = test_data.get('event')
+        logger.info(f"Test message_edited webhook: Event type detected: {event_type}")
+        
+        if event_type == 'message_edited':
+            logger.info("Test message_edited webhook: Processing message_edited event")
+            
+            account_id = test_data.get('account_id')
+            account_info = test_data.get('account_info', {})
+            sender = test_data.get('sender', {})
+            sender_provider_id = sender.get('attendee_provider_id')
+            message_text = test_data.get('message')
+            chat_id = test_data.get('chat_id')
+            
+            logger.info(f"Test message_edited webhook: account={account_id}, sender={sender_provider_id}, message={message_text}")
+            
+            # Check if this is our message being edited (connection acceptance)
+            our_user_id = account_info.get('user_id')
+            if sender_provider_id == our_user_id:
+                logger.info(f"Test message_edited webhook: Message edited from our account - potential connection acceptance")
+                
+                # Check if this looks like an invitation message
+                invitation_indicators = [
+                    "I work with CFOs to shorten budget cycles",
+                    "I work with distributors to automate order processing", 
+                    "thought it'd be useful to connect",
+                    "Would love to connect and share insights",
+                    "share a resource we've just launched"
+                ]
+                
+                is_invitation_message = any(indicator.lower() in message_text.lower() for indicator in invitation_indicators)
+                
+                if is_invitation_message and chat_id:
+                    logger.info(f"Test message_edited webhook: Connection acceptance detected via message_edited")
+                    
+                    # Find lead by matching the message content or by recent invite_sent status
+                    from src.models import Lead
+                    
+                    # Look for leads with recent invite_sent status for this account
+                    # Find leads through campaign -> client -> linkedin_account relationship
+                    from src.models import Campaign, Client, LinkedInAccount
+                    
+                    # First find the LinkedIn account
+                    linkedin_account = LinkedInAccount.query.filter_by(
+                        account_id=account_id
+                    ).first()
+                    
+                    if linkedin_account:
+                        # Find campaigns for this client
+                        campaigns = Campaign.query.filter_by(
+                            client_id=linkedin_account.client_id
+                        ).all()
+                        
+                        campaign_ids = [c.id for c in campaigns]
+                        
+                        # Find recent leads with invite_sent status in these campaigns
+                        recent_leads = Lead.query.filter(
+                            Lead.campaign_id.in_(campaign_ids),
+                            Lead.status.in_(['invite_sent', 'invited'])
+                        ).order_by(Lead.created_at.desc()).limit(5).all()
+                    else:
+                        recent_leads = []
+                    
+                    lead = None
+                    for recent_lead in recent_leads:
+                        # Check if this lead's name might match the message recipient
+                        if recent_lead.first_name and recent_lead.first_name.lower() in message_text.lower():
+                            lead = recent_lead
+                            logger.info(f"Test message_edited webhook: Found lead {lead.id} by name match: {recent_lead.first_name}")
+                            break
+                    
+                    # If no name match, take the most recent invite_sent lead
+                    if not lead and recent_leads:
+                        lead = recent_leads[0]
+                        logger.info(f"Test message_edited webhook: Using most recent invite_sent lead: {lead.id}")
+                    
+                    if lead and lead.status in ['invite_sent', 'invited']:
+                        logger.info(f"Test message_edited webhook: Connection acceptance confirmed for lead {lead.id}")
+                        
+                        # Update lead status to connected
+                        old_status = lead.status
+                        lead.status = 'connected'
+                        lead.connected_at = datetime.utcnow()
+                        lead.conversation_id = chat_id
+                        
+                        # Create event record
+                        from src.models import Event
+                        event = Event(
+                            event_type='connection_accepted',
+                            lead_id=lead.id,
+                            meta_json={
+                                'account_id': account_id,
+                                'user_provider_id': sender_provider_id,
+                                'detection_method': 'test_message_edited_webhook',
+                                'chat_id': chat_id,
+                                'message_text': message_text,
+                                'webhook_data_id': webhook_data.id
+                            }
+                        )
+                        
+                        db.session.add(event)
+                        db.session.commit()
+                        
+                        return jsonify({
+                            'status': 'connection_accepted',
+                            'message': f'Lead {lead.id} status updated from {old_status} to connected via message_edited',
+                            'webhook_data_id': webhook_data.id,
+                            'event_id': event.id
+                        }), 200
+                    else:
+                        return jsonify({
+                            'status': 'no_matching_lead',
+                            'message': 'No matching lead found for message_edited connection detection',
+                            'webhook_data_id': webhook_data.id
+                        }), 200
+                else:
+                    return jsonify({
+                        'status': 'not_invitation_message',
+                        'message': 'Message does not appear to be an invitation message',
+                        'webhook_data_id': webhook_data.id
+                    }), 200
+            else:
+                return jsonify({
+                    'status': 'not_our_message',
+                    'message': f'Message edited from other account: {sender_provider_id}',
+                    'webhook_data_id': webhook_data.id
+                }), 200
+        
+        return jsonify({
+            'status': 'unknown_event',
+            'message': f'Unknown event type: {event_type}',
+            'webhook_data_id': webhook_data.id
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Test message_edited webhook error: {str(e)}")
         db.session.rollback()
         return jsonify({'error': str(e)}), 500
 

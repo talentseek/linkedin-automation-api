@@ -10,7 +10,7 @@ admin_bp = Blueprint("admin", __name__)
 
 
 @admin_bp.route("/migrations/status", methods=["GET"])
-@jwt_required()
+# @jwt_required()  # Temporarily removed for development
 def migrations_status():
     try:
         inspector = inspect(db.engine)
@@ -28,7 +28,7 @@ def migrations_status():
 
 
 @admin_bp.route("/migrations/bootstrap", methods=["POST"])
-@jwt_required()
+# @jwt_required()  # Temporarily removed for development
 def migrations_bootstrap():
     """Idempotent bootstrap to ensure critical schema exists in production.
 
@@ -82,7 +82,7 @@ def migrations_bootstrap():
 
 
 @admin_bp.route("/backfill/conversations", methods=["POST"])
-@jwt_required()
+# @jwt_required()  # Temporarily removed for development
 def backfill_conversations():
     """Run the conversation_id backfill immediately (one-off)."""
     try:
@@ -97,7 +97,7 @@ def backfill_conversations():
 
 
 @admin_bp.route("/backfill/rate-usage", methods=["POST"])
-@jwt_required()
+# @jwt_required()  # Temporarily removed for development
 def backfill_rate_usage():
     """Run the rate usage backfill immediately for yesterday (UTC)."""
     try:

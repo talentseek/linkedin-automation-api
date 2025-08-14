@@ -14,7 +14,7 @@ primary_region = "lhr"
   DATABASE_URL = "postgresql://postgres:e120fleB@213.188.197.151:5432/postgres"
   # Security Configuration
   SECRET_KEY = "your-secret-key-here"
-  JWT_SECRET_KEY = "your-jwt-secret-key-here"
+  JWT_SECRET_KEY = "linkedin-automation-jwt-secret-2024-production"
   # Unipile API Configuration
            UNIPILE_API_KEY = "/24cB17g.VGRx4/+DnxZcUCtAt7f01fpw4Zb8iMjltxRs4cPBncs="
   UNIPILE_API_BASE_URL = "https://api3.unipile.com:13359"

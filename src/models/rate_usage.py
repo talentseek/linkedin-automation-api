@@ -27,8 +27,9 @@ class RateUsage(db.Model):
             .first()
         )
         if row is None:
+            import uuid
             row = cls(
-                id=str(db.func.uuid_generate_v4()) if hasattr(db.func, 'uuid_generate_v4') else str(db.func.gen_random_uuid()) if hasattr(db.func, 'gen_random_uuid') else str(db.func.uuid()),
+                id=str(uuid.uuid4()),
                 linkedin_account_id=linkedin_account_id,
                 usage_date=usage_day,
                 invites_sent=0,

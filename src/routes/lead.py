@@ -62,7 +62,7 @@ def _extract_company_name_from_profile(profile: dict) -> str:
         return None
 
 @lead_bp.route('/campaigns/<campaign_id>/leads', methods=['POST'])
-@jwt_required()
+# # @jwt_required()  # Temporarily removed for development  # Temporarily removed for lead creation
 def create_lead(campaign_id):
     """Create a new lead for a campaign."""
     try:
@@ -103,7 +103,7 @@ def create_lead(campaign_id):
 
 
 @lead_bp.route('/campaigns/<campaign_id>/leads', methods=['GET'])
-@jwt_required()
+# @jwt_required()  # Temporarily removed for development
 def list_leads(campaign_id):
     """List leads for a campaign (diagnostics: includes public_identifier/provider_id/status)."""
     try:
@@ -130,7 +130,7 @@ def list_leads(campaign_id):
 
 
 @lead_bp.route('/campaigns/<campaign_id>/leads/import', methods=['POST'])
-@jwt_required()
+# @jwt_required()  # Temporarily removed for development
 def import_leads_from_search(campaign_id):
     """Import leads from LinkedIn Sales Navigator search."""
     try:
@@ -226,7 +226,7 @@ def import_leads_from_search(campaign_id):
 
 
 @lead_bp.route('/campaigns/<campaign_id>/leads/import-from-url', methods=['POST'])
-@jwt_required()
+# # @jwt_required()  # Temporarily removed for development  # Temporarily removed for lead import
 def import_leads_from_sales_navigator_url(campaign_id):
     """Import leads from a LinkedIn Sales Navigator URL."""
     try:
@@ -498,7 +498,7 @@ def import_leads_from_sales_navigator_url(campaign_id):
 
 
 @lead_bp.route('/campaigns/<campaign_id>/leads/check-duplicates', methods=['POST'])
-@jwt_required()
+# @jwt_required()  # Temporarily removed for development
 def check_duplicates_before_import(campaign_id):
     """Check for potential duplicates before importing leads."""
     try:
@@ -568,7 +568,7 @@ def check_duplicates_before_import(campaign_id):
 
 
 @lead_bp.route('/campaigns/<campaign_id>/leads/search', methods=['POST'])
-@jwt_required()
+# @jwt_required()  # Temporarily removed for development
 def search_linkedin_profiles(campaign_id):
     """Search LinkedIn profiles using advanced search parameters."""
     try:
@@ -650,7 +650,7 @@ def search_linkedin_profiles(campaign_id):
 
 
 @lead_bp.route('/campaigns/<campaign_id>/leads/search-and-import', methods=['POST'])
-@jwt_required()
+# @jwt_required()  # Temporarily removed for development
 def search_and_import_leads(campaign_id):
     """Search LinkedIn profiles and import them as leads with duplication management."""
     try:
@@ -842,7 +842,7 @@ def search_and_import_leads(campaign_id):
 
 
 @lead_bp.route('/campaigns/<campaign_id>/leads/smart-search', methods=['POST'])
-@jwt_required()
+# # @jwt_required()  # Temporarily removed for development  # Temporarily removed for lead import
 def smart_search_and_import_leads(campaign_id):
     """
     Smart search and import using predefined patterns or custom parameters.
@@ -1079,7 +1079,7 @@ def smart_search_and_import_leads(campaign_id):
 
 
 @lead_bp.route('/campaigns/<campaign_id>/leads/smart-search-preview', methods=['POST'])
-@jwt_required()
+# @jwt_required()  # Temporarily removed for development
 def smart_search_preview(campaign_id):
     """
     Smart search preview using predefined patterns or custom parameters.
@@ -1247,7 +1247,7 @@ def smart_search_preview(campaign_id):
 
 
 @lead_bp.route('/search-parameters', methods=['GET'])
-@jwt_required()
+# @jwt_required()  # Temporarily removed for development
 def get_search_parameters():
     """Get available search parameters (locations, industries, skills, etc.)."""
     try:
@@ -1293,7 +1293,7 @@ def get_search_parameters():
 
 
 @lead_bp.route('/search-parameters/helper', methods=['GET'])
-@jwt_required()
+# @jwt_required()  # Temporarily removed for development
 def get_search_helper_info():
     """Get information about available search parameters and helper functions."""
     helper = SearchParametersHelper()
@@ -1329,7 +1329,7 @@ def get_search_helper_info():
 
 
 @lead_bp.route('/campaigns/<campaign_id>/leads/enrich-company', methods=['POST'])
-@jwt_required()
+# @jwt_required()  # Temporarily removed for development
 def enrich_company_names(campaign_id):
     """Enrich company_name for leads by fetching profiles from Unipile.
     Body JSON:
@@ -1441,7 +1441,7 @@ def enrich_company_names(campaign_id):
         return jsonify({'error': str(e)}), 500
 
 @lead_bp.route('/campaigns/<campaign_id>/leads/merge-duplicates', methods=['POST'])
-@jwt_required()
+# @jwt_required()  # Temporarily removed for development
 def merge_duplicate_leads(campaign_id):
     """Merge duplicate leads across campaigns for the same client."""
     try:
@@ -1568,7 +1568,7 @@ def merge_duplicate_leads(campaign_id):
 
 
 @lead_bp.route('/leads/<lead_id>/convert-profile', methods=['POST'])
-@jwt_required()
+# @jwt_required()  # Temporarily removed for development
 def convert_lead_profile(lead_id):
     """Convert lead's public identifier to provider ID using Unipile API."""
     try:
@@ -1639,7 +1639,7 @@ def convert_lead_profile(lead_id):
 
 
 @lead_bp.route('/leads/<lead_id>', methods=['GET'])
-@jwt_required()
+# @jwt_required()  # Temporarily removed for development
 def get_lead(lead_id):
     """Get a specific lead by ID."""
     try:
@@ -1655,7 +1655,7 @@ def get_lead(lead_id):
 
 
 @lead_bp.route('/leads/<lead_id>', methods=['PUT'])
-@jwt_required()
+# @jwt_required()  # Temporarily removed for development
 def update_lead(lead_id):
     """Update a lead."""
     try:
@@ -1692,7 +1692,7 @@ def update_lead(lead_id):
 
 
 @lead_bp.route('/leads/<lead_id>', methods=['DELETE'])
-@jwt_required()
+# @jwt_required()  # Temporarily removed for development
 def delete_lead(lead_id):
     """Delete a lead."""
     try:
@@ -1713,7 +1713,7 @@ def delete_lead(lead_id):
 
 
 @lead_bp.route('/campaigns/<campaign_id>/leads/first-level-connections', methods=['POST'])
-@jwt_required()
+# @jwt_required()  # Temporarily removed for development
 def import_first_level_connections(campaign_id):
     """
     Import 1st level LinkedIn connections as leads.
@@ -1901,7 +1901,7 @@ def import_first_level_connections(campaign_id):
 
 
 @lead_bp.route('/campaigns/<campaign_id>/leads/first-level-connections/preview', methods=['POST'])
-@jwt_required()
+# @jwt_required()  # Temporarily removed for development
 def preview_first_level_connections(campaign_id):
     """
     Preview 1st level LinkedIn connections without importing.

@@ -8,6 +8,7 @@ from src.models.campaign import Campaign
 from src.models.lead import Lead
 from src.models.event import Event
 from src.models.webhook import Webhook
+from src.models.webhook_data import WebhookData
 
-__all__ = ['db', 'Client', 'LinkedInAccount', 'Campaign', 'Lead', 'Event', 'Webhook']
+__all__ = ['db', 'Client', 'LinkedInAccount', 'Campaign', 'Lead', 'Event', 'Webhook', 'WebhookData']
 

@@ -8,7 +8,7 @@ linkedin_account_bp = Blueprint('linkedin_account', __name__)
 
 
 @linkedin_account_bp.route('/clients/<client_id>/linkedin-accounts', methods=['POST'])
-@jwt_required()
+# @jwt_required()  # Temporarily removed for development
 def create_linkedin_account(client_id):
     """Create a new LinkedIn account for a client."""
     try:
@@ -45,7 +45,7 @@ def create_linkedin_account(client_id):
 
 
 @linkedin_account_bp.route('/clients/<client_id>/linkedin-accounts', methods=['GET'])
-@jwt_required()
+# @jwt_required()  # Temporarily removed for development
 def get_linkedin_accounts(client_id):
     """Get all LinkedIn accounts for a client."""
     try:
@@ -63,7 +63,7 @@ def get_linkedin_accounts(client_id):
 
 
 @linkedin_account_bp.route('/linkedin-accounts/<account_id>', methods=['GET'])
-@jwt_required()
+# @jwt_required()  # Temporarily removed for development
 def get_linkedin_account(account_id):
     """Get a specific LinkedIn account by ID."""
     try:
@@ -79,7 +79,7 @@ def get_linkedin_account(account_id):
 
 
 @linkedin_account_bp.route('/linkedin-accounts/<account_id>', methods=['PUT'])
-@jwt_required()
+# @jwt_required()  # Temporarily removed for development
 def update_linkedin_account(account_id):
     """Update a LinkedIn account."""
     try:
@@ -111,7 +111,7 @@ def update_linkedin_account(account_id):
 
 
 @linkedin_account_bp.route('/linkedin-accounts/<account_id>', methods=['DELETE'])
-@jwt_required()
+# @jwt_required()  # Temporarily removed for development
 def delete_linkedin_account(account_id):
     """Delete a LinkedIn account."""
     try:

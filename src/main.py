@@ -1,7 +1,7 @@
 import os
 import sys
 import logging
-from flask import Flask, send_from_directory
+from flask import Flask, send_from_directory, jsonify
 from flask_cors import CORS
 
 # Add src directory to Python path
@@ -105,13 +105,21 @@ def create_app(config_name=None):
         app.logger.setLevel(logging.INFO)
         app.logger.info('LinkedIn Automation API startup')
     
-    # Serve static files
+    # Serve static files - moved to end to avoid overriding API routes
     @app.route('/')
     def index():
         return send_from_directory('static', 'index.html')
     
-    @app.route('/<path:filename>')
+    @app.route('/static/<path:filename>')
     def static_files(filename):
+        return send_from_directory('static', filename)
+    
+    # Only serve other static files if they exist and are not API routes
+    @app.route('/<path:filename>')
+    def other_static_files(filename):
+        # Don't serve files that start with 'api'
+        if filename.startswith('api/'):
+            return jsonify({'error': 'API endpoint not found'}), 404
         return send_from_directory('static', filename)
     
     return app

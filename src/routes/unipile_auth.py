@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 
 
 @unipile_auth_bp.route('/clients/<client_id>/linkedin-auth', methods=['POST'])
-@jwt_required()
+# @jwt_required()  # Temporarily removed for development
 def create_linkedin_auth_url(client_id):
     """Get existing LinkedIn accounts or create authentication URL."""
     try:

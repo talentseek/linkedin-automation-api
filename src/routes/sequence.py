@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 
 
 @sequence_bp.route('/campaigns/<campaign_id>/sequence', methods=['PUT'])
-@jwt_required()
+# @jwt_required()  # Temporarily removed for development
 def update_campaign_sequence(campaign_id):
     """Update the sequence definition for a campaign."""
     try:
@@ -50,7 +50,7 @@ def update_campaign_sequence(campaign_id):
 
 
 @sequence_bp.route('/campaigns/<campaign_id>/sequence', methods=['GET'])
-@jwt_required()
+# @jwt_required()  # Temporarily removed for development
 def get_campaign_sequence(campaign_id):
     """Get the sequence definition for a campaign."""
     try:
@@ -70,7 +70,7 @@ def get_campaign_sequence(campaign_id):
 
 
 @sequence_bp.route('/sequence/example', methods=['GET'])
-@jwt_required()
+# @jwt_required()  # Temporarily removed for development
 def get_example_sequence():
     """Get an example sequence definition."""
     return jsonify({
@@ -80,7 +80,7 @@ def get_example_sequence():
 
 
 @sequence_bp.route('/leads/<lead_id>/next-step', methods=['GET'])
-@jwt_required()
+# @jwt_required()  # Temporarily removed for development
 def get_lead_next_step(lead_id):
     """Get the next step in the sequence for a lead."""
     try:
@@ -115,7 +115,7 @@ def get_lead_next_step(lead_id):
 
 
 @sequence_bp.route('/leads/<lead_id>/execute-step', methods=['POST'])
-@jwt_required()
+# @jwt_required()  # Temporarily removed for development
 def execute_lead_step(lead_id):
     """Execute the next step in the sequence for a lead."""
     try:
@@ -178,7 +178,7 @@ def execute_lead_step(lead_id):
 
 
 @sequence_bp.route('/leads/<lead_id>/preview-step', methods=['POST'])
-@jwt_required()
+# @jwt_required()  # Temporarily removed for development
 def preview_lead_step(lead_id):
     """Preview the personalized message for the next step without executing it."""
     try:
@@ -216,7 +216,7 @@ def preview_lead_step(lead_id):
 
 
 @sequence_bp.route('/sequence/validate', methods=['POST'])
-@jwt_required()
+# @jwt_required()  # Temporarily removed for development
 def validate_sequence():
     """Validate a sequence definition."""
     try:

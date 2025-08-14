@@ -2,6 +2,63 @@
 
 This document tracks next steps, new endpoints to add, audit findings, and recommended improvements for the LinkedIn Automation API.
 
+## 0) Critical Issue: Replies not detected (2025-08-13)
+
+Symptoms
+- Inbound replies are not being recorded as `message_received` events for active campaigns (e.g., "Director of Operations").
+- Examples reported: Scott Weir (no reply detected), previously: James A. Polanco, Steven Riebe.
+- Leads remain at `connected`/`messaged` instead of transitioning to `responded`, and automation may continue when it should stop.
+
+Impact
+- High operational risk; system considered unusable for pilots until fixed.
+- Operators cannot trust reply detection; follow-ups risk sending after a reply.
+
+What we verified today
+- Scheduler is running; connected leads are getting first messages promptly (step=2, `last_step_sent_at` set minutes after acceptance).
+- Rate limits reflect persisted usage; invites are correctly blocked when over daily caps; messages remain allowed.
+- Historical connection sync is working and sets `conversation_id` for many accepted connections.
+- 6-hour backfill (`POST /api/webhooks/backfill/replies`) returned `new_replies_recorded: 0` during verification.
+
+Working hypotheses (to validate)
+- Messaging webhook configuration: wrong `request_url` or headers, or multiple webhooks competing; ensure only one messaging webhook points to `/api/webhooks/unipile/messaging`.
+- Payload shape variance: handler may miss cases where identifiers land under `data.sender`, `attendees`, or where only `chat_id` is present and requires fetching recent chat messages.
+- Direction detection: incorrect filtering of inbound vs outbound when `is_sender` is None; must compare `message.sender_id` against `account_info.user_id` reliably.
+- Lead matching gaps: leads missing `provider_id` and only having `public_identifier`; or webhook sender uses URN/numeric id requiring profile resolution to provider_id before lookup.
+- Account status: when Unipile account status ≠ OK, messaging webhooks may pause; we must switch to `/messages` polling during these windows.
+- Idempotency: lack of DB-level uniqueness for `(lead_id, event_type, unipile_message_id|provider_message_id)`; could also mask detection errors if duplicates or missing keys occur.
+
+Diagnostics to run first thing tomorrow
+- Fetch and inspect last 50 raw messaging webhook deliveries (server access/logs) for shape and headers; confirm timely 200 responses (<30s).
+- List webhooks and ensure exactly one `messaging` webhook exists with correct URL and secret; delete others.
+- For a known case (Scott Weir):
+  - Resolve his lead id, `provider_id`, and `public_identifier`.
+  - List chat messages for the `conversation_id` and the last 24h via `/api/v1/chats/{chat_id}/messages` and global `/api/v1/messages?after=...`.
+  - Confirm an inbound message exists and capture `message.id`, `provider_message_id`, `sender_id`, `is_sender`.
+  - Verify our handler’s matching path would find his lead from those identifiers.
+
+Concrete action plan
+1) Webhook hygiene and certainty
+   - Recreate messaging webhook to `/api/webhooks/unipile/messaging` (one only); set `X-Unipile-Secret` if configured; verify deliveries.
+   - Add explicit logging for: `event_type`, `account_id`, `chat_id`, `is_sender`, `sender_id`, and the chosen lead match key.
+2) Matching and direction robustness
+   - Ensure direction logic: accept if `is_sender == False`; if `is_sender is None`, treat as inbound when `sender_id != account_info.user_id`.
+   - Strengthen lead resolution: try `provider_id`, then URN/numeric → `get_user_profile` to provider_id, then fallback by `public_identifier`; as last resort, match by chat participants.
+3) Polling fallback hardening
+   - Expand global `/messages` polling in `backfill_replies` with pagination and dedupe by `message.id`; limit by lookback and account status.
+4) Idempotency at DB level
+   - Add a unique index on `(lead_id, event_type, (unipile_message_id or provider_message_id))` for `message_received` to guarantee one-time processing.
+5) Observability and tests
+   - Add a diagnostic endpoint: fetch last N `message_received` events and last N raw messages for a lead/conversation.
+   - Create an e2e test runbook: send a controlled inbound message from a test profile and verify `Event` + lead status within 60–120s.
+
+Acceptance criteria
+- For named leads (e.g., Scott Weir, James A. Polanco), system records `message_received` with correct identifiers, and lead status transitions to `responded` within 1–2 minutes (webhook) or within the lookback window (polling).
+- Analytics reflect increased reply counts; automation ceases on replied leads.
+
+Owner/ETA
+- Owner: Engineering
+- Target: Begin at 09:00 local; aim for verified fix and redeploy by EOD tomorrow.
+
 ## 1) New Analytics Endpoints (Proposed)
 
 Add a dedicated analytics surface beyond the existing snapshot endpoint (`GET /api/webhooks/status`).

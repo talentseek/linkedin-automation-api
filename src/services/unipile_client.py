@@ -260,7 +260,8 @@ class UnipileClient:
         If cursor/limit provided, forwards them to primary endpoint.
         """
         # Doc references: GET /api/v1/chats?account_id=...
-        params = {"account_id": account_id}
+        # According to error logs, account_id should be an array
+        params = {"account_id": [account_id]}
         if cursor:
             params["cursor"] = cursor
         if limit:
@@ -272,7 +273,7 @@ class UnipileClient:
             try:
                 return self._make_request("GET", f"/api/v1/linkedin/accounts/{account_id}/conversations")
             except UnipileAPIError:
-                return self._make_request("GET", "/api/v1/conversations", params={"account_id": account_id})
+                return self._make_request("GET", "/api/v1/conversations", params={"account_id": [account_id]})
 
     def get_all_chats(self, account_id, page_limit=1000):
         """Fetch all chats using pagination on /api/v1/chats when available."""

@@ -31,9 +31,7 @@ class OutreachScheduler:
         self.working_hours_start = 9
         self.working_hours_end = 17
         
-        # Daily counters
-        self.daily_connections = 0
-        self.daily_messages = 0
+        # Daily counters - REMOVED: using persisted database instead
         self.last_reset_date = None
         # Nightly jobs control
         self.nightly_hour_utc = 1  # 01:00 UTC by default
@@ -96,6 +94,9 @@ class OutreachScheduler:
                 # Run nightly maintenance once per day after configured hour
                 self._maybe_run_nightly_backfills()
                 
+                # Periodic connection detection check (every 2 hours)
+                self._maybe_check_for_new_connections()
+                
                 # Sleep for 60 seconds before next iteration to reduce latency for new events
                 time.sleep(60)  # 1 minute
                 
@@ -113,12 +114,290 @@ class OutreachScheduler:
         try:
             current_date = datetime.utcnow().date()
             if self.last_reset_date != current_date:
-                self.daily_connections = 0
-                self.daily_messages = 0
                 self.last_reset_date = current_date
-                logger.info("Daily counters reset")
+                logger.info("Daily counter reset date updated")
         except Exception as e:
-            logger.error(f"Error resetting daily counters: {str(e)}")
+            logger.error(f"Error updating reset date: {str(e)}")
+
+    def _maybe_check_for_new_connections(self):
+        """Periodic check for new connections using Unipile relations API."""
+        try:
+            # Check every 2 hours (at 0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22)
+            utc_now = datetime.utcnow()
+            if utc_now.hour % 2 != 0:
+                return
+            
+            # Only run once per 2-hour window (check minute to avoid multiple runs)
+            if utc_now.minute > 10:
+                return
+                
+            logger.info("Starting periodic connection detection check")
+            
+            from src.models.linkedin_account import LinkedInAccount
+            from src.services.unipile_client import UnipileClient
+            
+            # Get all connected LinkedIn accounts
+            accounts = LinkedInAccount.query.filter_by(status='connected').all()
+            
+            for account in accounts:
+                try:
+                    self._check_account_relations(account)
+                except Exception as e:
+                    logger.error(f"Error checking relations for account {account.account_id}: {str(e)}")
+                    continue
+                    
+        except Exception as e:
+            logger.error(f"Error in periodic connection detection: {str(e)}")
+    
+    def _check_account_relations(self, linkedin_account):
+        """Check relations for a specific LinkedIn account to detect new connections."""
+        try:
+            from src.services.unipile_client import UnipileClient
+            from src.models import Lead, Event
+            
+            unipile = UnipileClient()
+            
+            # Also check the account ID that's being used in webhook events
+            # This handles the case where webhooks monitor all accounts
+            additional_account_ids = ['be9bc33c-9015-44d7-890f-b08e25fa0302']
+            
+            # Check both the database account and any additional accounts
+            accounts_to_check = [linkedin_account.account_id] + additional_account_ids
+            
+            for account_id in accounts_to_check:
+                try:
+                    # Try relations API first
+                    self._check_single_account_relations(account_id, unipile)
+                except Exception as e:
+                    logger.warning(f"Relations API failed for account {account_id}: {str(e)}")
+                    # Fallback: check sent invitations for this account
+                    try:
+                        self._check_sent_invitations(account_id, unipile)
+                    except Exception as e2:
+                        logger.warning(f"Sent invitations API also failed for account {account_id}: {str(e2)}")
+                    continue
+                        
+        except Exception as e:
+            logger.error(f"Error checking relations for account {linkedin_account.account_id}: {str(e)}")
+            db.session.rollback()
+    
+    def _check_single_account_relations(self, account_id, unipile):
+        """Check relations for a single account ID."""
+        try:
+            from src.models import Lead, Event
+            
+            # Get recent relations (last 50 to avoid too many API calls)
+            relations_response = unipile.get_relations(account_id, limit=50)
+            if not relations_response or 'items' not in relations_response:
+                logger.warning(f"No relations data for account {account_id}")
+                return
+            
+            relations = relations_response['items']
+            logger.info(f"Found {len(relations)} relations for account {account_id}")
+            
+            # Check each relation against our pending leads
+            for relation in relations:
+                # Unipile relations API uses 'member_id' field
+                user_provider_id = relation.get('member_id') or relation.get('provider_id')
+                if not user_provider_id:
+                    continue
+                
+                # Find lead with this provider_id that has invite_sent status
+                lead = Lead.query.filter_by(
+                    provider_id=user_provider_id,
+                    status='invite_sent'
+                ).first()
+                
+                # If not found by provider_id, try fuzzy matching by name
+                if not lead:
+                    logger.info(f"Provider ID {user_provider_id} not found, trying fuzzy name matching")
+                    # Get first and last name from relation
+                    first_name = relation.get('first_name', '').strip()
+                    last_name = relation.get('last_name', '').strip()
+                    
+                    if first_name and last_name:
+                        # Try exact name match first
+                        lead = Lead.query.filter_by(
+                            first_name=first_name,
+                            last_name=last_name,
+                            status='invite_sent'
+                        ).first()
+                        
+                        # If still not found, try case-insensitive matching
+                        if not lead:
+                            lead = Lead.query.filter(
+                                Lead.first_name.ilike(first_name),
+                                Lead.last_name.ilike(last_name),
+                                Lead.status == 'invite_sent'
+                            ).first()
+                        
+                        if lead:
+                            logger.info(f"Found lead {lead.id} via fuzzy name matching: {first_name} {last_name}")
+                        else:
+                            logger.debug(f"No lead found for name: {first_name} {last_name}")
+                
+                if lead:
+                    logger.info(f"New connection detected via relations API for lead {lead.id} from account {account_id}")
+                    
+                    # Update lead status to connected
+                    lead.status = 'connected'
+                    lead.connected_at = datetime.utcnow()
+                    
+                    # Try to get conversation ID
+                    try:
+                        conversation_id = unipile.find_conversation_with_provider(
+                            account_id, 
+                            user_provider_id
+                        )
+                        if conversation_id:
+                            lead.conversation_id = conversation_id
+                    except Exception as e:
+                        logger.warning(f"Could not get conversation ID for lead {lead.id}: {str(e)}")
+                    
+                    # Create event record
+                    event = Event(
+                        event_type='connection_accepted',
+                        lead_id=lead.id,
+                        meta_json={
+                            'account_id': account_id,
+                            'user_provider_id': user_provider_id,
+                            'detection_method': 'periodic_relations_check',
+                            'relation_data': relation,
+                            'conversation_id': lead.conversation_id
+                        }
+                    )
+                    
+                    db.session.add(event)
+                    db.session.commit()
+                    
+                    logger.info(f"Successfully updated lead {lead.id} to connected status via relations check")
+                    
+                    # Trigger next step in sequence if automation is active
+                    from src.models import Campaign
+                    campaign = Campaign.query.get(lead.campaign_id)
+                    if campaign and campaign.status == 'active':
+                        # Find the LinkedIn account by account_id to get the database ID
+                        linkedin_account = LinkedInAccount.query.filter_by(account_id=account_id).first()
+                        if linkedin_account:
+                            # Schedule the next message step
+                            self.schedule_lead_step(lead.id, linkedin_account.id)
+                            logger.info(f"Scheduled next step for lead {lead.id} via relations check")
+                        else:
+                            logger.warning(f"LinkedIn account not found in database for account_id {account_id}, cannot schedule next step")
+                        
+        except Exception as e:
+            logger.error(f"Error checking relations for account {account_id}: {str(e)}")
+            db.session.rollback()
+    
+    def _check_sent_invitations(self, account_id, unipile):
+        """Check sent invitations to detect which ones are no longer pending (accepted/rejected)."""
+        try:
+            from src.models import Lead, Event
+            
+            # Get sent invitations for this account
+            invitations_response = unipile.get_sent_invitations(account_id)
+            if not invitations_response or 'items' not in invitations_response:
+                logger.warning(f"No sent invitations data for account {account_id}")
+                return
+            
+            invitations = invitations_response['items']
+            logger.info(f"Found {len(invitations)} sent invitations for account {account_id}")
+            
+            # Check each invitation against our pending leads
+            for invitation in invitations:
+                # Get the recipient's provider_id from the invitation
+                recipient = invitation.get('recipient', {})
+                user_provider_id = recipient.get('provider_id')
+                
+                if not user_provider_id:
+                    continue
+                
+                # Check if invitation is no longer pending (accepted or rejected)
+                invitation_status = invitation.get('status', 'pending')
+                if invitation_status == 'pending':
+                    continue  # Still pending, skip
+                
+                # Find lead with this provider_id that has invite_sent status
+                lead = Lead.query.filter_by(
+                    provider_id=user_provider_id,
+                    status='invite_sent'
+                ).first()
+                
+                # If not found by provider_id, try fuzzy matching by name
+                if not lead:
+                    logger.info(f"Provider ID {user_provider_id} not found in sent invitations, trying fuzzy name matching")
+                    # Get first and last name from invitation recipient
+                    recipient = invitation.get('recipient', {})
+                    first_name = recipient.get('first_name', '').strip()
+                    last_name = recipient.get('last_name', '').strip()
+                    
+                    if first_name and last_name:
+                        # Try exact name match first
+                        lead = Lead.query.filter_by(
+                            first_name=first_name,
+                            last_name=last_name,
+                            status='invite_sent'
+                        ).first()
+                        
+                        # If still not found, try case-insensitive matching
+                        if not lead:
+                            lead = Lead.query.filter(
+                                Lead.first_name.ilike(first_name),
+                                Lead.last_name.ilike(last_name),
+                                Lead.status == 'invite_sent'
+                            ).first()
+                        
+                        if lead:
+                            logger.info(f"Found lead {lead.id} via fuzzy name matching in sent invitations: {first_name} {last_name}")
+                        else:
+                            logger.debug(f"No lead found for name in sent invitations: {first_name} {last_name}")
+                
+                if lead:
+                    if invitation_status == 'accepted':
+                        logger.info(f"Invitation accepted detected via sent invitations API for lead {lead.id} from account {account_id}")
+                        
+                        # Update lead status to connected
+                        lead.status = 'connected'
+                        lead.connected_at = datetime.utcnow()
+                        
+                        # Create event record
+                        event = Event(
+                            event_type='connection_accepted',
+                            lead_id=lead.id,
+                            meta_json={
+                                'account_id': account_id,
+                                'user_provider_id': user_provider_id,
+                                'detection_method': 'sent_invitations_check',
+                                'invitation_data': invitation,
+                                'invitation_status': invitation_status
+                            }
+                        )
+                        
+                        db.session.add(event)
+                        db.session.commit()
+                        
+                        logger.info(f"Successfully updated lead {lead.id} to connected status via sent invitations check")
+                        
+                        # Trigger next step in sequence if automation is active
+                        from src.models import Campaign
+                        campaign = Campaign.query.get(lead.campaign_id)
+                        if campaign and campaign.status == 'active':
+                            # Find the LinkedIn account by account_id to get the database ID
+                            linkedin_account = LinkedInAccount.query.filter_by(account_id=account_id).first()
+                            if linkedin_account:
+                                # Schedule the next message step
+                                self.schedule_lead_step(lead.id, linkedin_account.id)
+                                logger.info(f"Scheduled next step for lead {lead.id} via sent invitations check")
+                            else:
+                                logger.warning(f"LinkedIn account not found in database for account_id {account_id}, cannot schedule next step")
+                    
+                    elif invitation_status == 'rejected':
+                        logger.info(f"Invitation rejected detected for lead {lead.id} from account {account_id}")
+                        # Could update lead status to 'rejected' if needed
+                        
+        except Exception as e:
+            logger.error(f"Error checking sent invitations for account {account_id}: {str(e)}")
+            db.session.rollback()
 
     def _maybe_run_nightly_backfills(self):
         try:
@@ -237,35 +516,7 @@ class OutreachScheduler:
         except Exception as e:
             logger.error(f"Rate usage backfill failed: {str(e)}")
     
-    def can_send_connection(self):
-        """Check if we can send a connection request."""
-        return self.daily_connections < self.max_connections_per_day
-    
-    def can_send_message(self):
-        """Check if we can send a message."""
-        return self.daily_messages < self.max_messages_per_day
-    
-    def record_connection_sent(self):
-        """Record that a connection request was sent."""
-        self.daily_connections += 1
-        logger.info(f"Connection sent. Daily count: {self.daily_connections}/{self.max_connections_per_day}")
-    
-    def record_message_sent(self):
-        """Record that a message was sent."""
-        self.daily_messages += 1
-        logger.info(f"Message sent. Daily count: {self.daily_messages}/{self.max_messages_per_day}")
-    
-    def can_send_message_to_first_level_connection(self):
-        """Check if we can send a message to a 1st level connection (higher limits)."""
-        # 1st level connections have higher messaging limits
-        # LinkedIn allows more messages to existing connections
-        max_messages_first_level = self.max_messages_per_day * 2  # Double the limit
-        return self.daily_messages < max_messages_first_level
-    
-    def record_message_to_first_level_connection(self):
-        """Record that a message was sent to a 1st level connection."""
-        self.daily_messages += 1
-        logger.info(f"Message sent to 1st level connection. Daily count: {self.daily_messages}/{self.max_messages_per_day * 2}")
+    # REMOVED: In-memory counter methods - using persisted database instead
 
     # ------------------------
     # Persisted, per-account usage gating
@@ -429,37 +680,28 @@ class OutreachScheduler:
                     
                     # Record the action
                     if next_step['action_type'] == 'connection_request':
-                        if self.can_send_connection():
-                            self.record_connection_sent()
-                            # Persist usage
-                            try:
-                                RateUsage.increment(linkedin_account.account_id, invites=1)
-                            except Exception as _:
-                                logger.warning("Failed to persist invite usage; continuing")
-                            # Update lead status to connected
-                            lead.status = 'connected'
-                            db.session.commit()
-                            logger.info(f"Updated lead {lead_id} status to connected")
-                        else:
-                            logger.warning(f"Daily connection limit reached for lead {lead_id}")
+                        # Persist usage to database
+                        try:
+                            RateUsage.increment(linkedin_account.account_id, invites=1)
+                            logger.info(f"Recorded connection request for account {linkedin_account.account_id}")
+                        except Exception as _:
+                            logger.warning("Failed to persist invite usage; continuing")
+                        # Update lead status to invite_sent (not connected yet)
+                        lead.status = 'invite_sent'
+                        db.session.commit()
+                        logger.info(f"Updated lead {lead_id} status to invite_sent")
                     elif next_step['action_type'] == 'message':
                         is_first_level = bool(lead.meta_json and lead.meta_json.get('source') == 'first_level_connections')
-                        if (is_first_level and self.can_send_message_to_first_level_connection()) or (not is_first_level and self.can_send_message()):
-                            if is_first_level:
-                                self.record_message_to_first_level_connection()
-                            else:
-                                self.record_message_sent()
-                            # Persist usage
-                            try:
-                                RateUsage.increment(linkedin_account.account_id, messages=1)
-                            except Exception as _:
-                                logger.warning("Failed to persist message usage; continuing")
-                            # Update lead status to messaged
-                            lead.status = 'messaged'
-                            db.session.commit()
-                            logger.info(f"Updated lead {lead_id} status to messaged")
-                        else:
-                            logger.warning(f"Daily message limit reached for lead {lead_id}")
+                        # Persist usage to database
+                        try:
+                            RateUsage.increment(linkedin_account.account_id, messages=1)
+                            logger.info(f"Recorded message for account {linkedin_account.account_id} (first_level={is_first_level})")
+                        except Exception as _:
+                            logger.warning("Failed to persist message usage; continuing")
+                        # Update lead status to messaged
+                        lead.status = 'messaged'
+                        db.session.commit()
+                        logger.info(f"Updated lead {lead_id} status to messaged")
                     
                     # Check if there are more steps in the sequence
                     next_next_step = self._get_sequence_engine().get_next_step_for_lead(lead)
@@ -538,23 +780,12 @@ class OutreachScheduler:
                             if not self._can_send_invite_for_account(linkedin_account.account_id):
                                 logger.warning(f"Persisted invite cap reached for account {linkedin_account.account_id}, skipping lead {lead.id}")
                                 continue
-                            if not self.can_send_connection():
-                                logger.warning(f"Daily connection limit reached ({self.daily_connections}/{self.max_connections_per_day}), skipping lead {lead.id}")
-                                continue
                         elif next_step['action_type'] == 'message':
                             is_first_level = bool(lead.meta_json and lead.meta_json.get('source') == 'first_level_connections')
                             # Persisted per-account message cap enforcement (with 2x for first-level)
                             if not self._can_send_message_for_account(linkedin_account.account_id, is_first_level):
                                 logger.warning(f"Persisted message cap reached for account {linkedin_account.account_id}, is_first_level={is_first_level}, skipping lead {lead.id}")
                                 continue
-                            if is_first_level:
-                                if not self.can_send_message_to_first_level_connection():
-                                    logger.warning(f"Daily first-level message limit reached (messages={self.daily_messages}/{self.max_messages_per_day*2}), skipping lead {lead.id}")
-                                    continue
-                            else:
-                                if not self.can_send_message():
-                                    logger.warning(f"Daily message limit reached ({self.daily_messages}/{self.max_messages_per_day}), skipping lead {lead.id}")
-                                    continue
                         
                         # Execute the step
                         logger.info(f"Executing step for lead {lead.id}")

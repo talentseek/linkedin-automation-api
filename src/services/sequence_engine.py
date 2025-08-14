@@ -8,26 +8,26 @@ from src.services.unipile_client import UnipileClient
 
 logger = logging.getLogger(__name__)
 
-# Example sequence definition
+# Example sequence definition with short messages
 EXAMPLE_SEQUENCE = [
     {
         "step_order": 1,
         "action_type": "connection_request",
-        "message": "Hi {{first_name}}, I noticed we're both in the {{company_name}} space. Would love to connect and share insights!",
+        "message": "Hi {{first_name}}, I work with distributors to automate order processing. Would love to connect and share insights!",
         "delay_hours": 0,
         "name": "Connection Request"
     },
     {
         "step_order": 2,
         "action_type": "message",
-        "message": "Hi {{first_name}}, thanks for connecting! I've been following {{company_name}}'s work and would love to learn more about what you're working on. Any chance you'd be open to a quick chat?",
+        "message": "Hi {{first_name}}, thanks for connecting! I'd love to learn more about {{company_name}}. Any chance you'd be open to a quick chat?",
         "delay_hours": 24,
         "name": "Follow-up Message"
     },
     {
         "step_order": 3,
         "action_type": "message",
-        "message": "Hi {{first_name}}, just wanted to follow up on my previous message. I think there could be some interesting opportunities for collaboration between our companies. Would you be interested in a 15-minute call to explore this further?",
+        "message": "Hi {{first_name}}, just following up on my previous message. Would you be interested in a 15-minute call to explore potential collaboration?",
         "delay_hours": 72,
         "name": "Final Follow-up"
     }
@@ -46,13 +46,30 @@ class SequenceEngine:
             self.unipile = UnipileClient()
         return self.unipile
     
+    def validate_and_truncate_message(self, message: str, max_length: int = 300) -> str:
+        """Validate and truncate message to fit LinkedIn's character limit."""
+        if len(message) <= max_length:
+            return message
+        
+        # Truncate and add ellipsis
+        truncated = message[:max_length-3] + "..."
+        logger.warning(f"Message truncated from {len(message)} to {len(truncated)} characters")
+        return truncated
+    
     def get_next_step_for_lead(self, lead: Lead) -> Optional[Dict[str, Any]]:
         """Get the next step for a lead based on their current status."""
         try:
             campaign = lead.campaign
             if not campaign.sequence:
                 logger.warning(f"No sequence defined for campaign {campaign.id}")
-                return None
+                # Auto-assign default sequence if none exists
+                try:
+                    campaign.sequence_json = EXAMPLE_SEQUENCE
+                    db.session.commit()
+                    logger.info(f"Auto-assigned default sequence to campaign {campaign.id}")
+                except Exception as e:
+                    logger.error(f"Failed to auto-assign sequence: {str(e)}")
+                    return None
             
             sequence = campaign.sequence
             current_step = lead.current_step or 0
@@ -174,9 +191,10 @@ class SequenceEngine:
             except Exception:
                 company_safe = 'your company'
 
-            formatted = message.replace('{first_name}', lead.first_name or 'there')
-            formatted = formatted.replace('{last_name}', lead.last_name or '')
-            formatted = formatted.replace('{company}', company_safe)
+            formatted = message.replace('{{first_name}}', lead.first_name or 'there')
+            formatted = formatted.replace('{{last_name}}', lead.last_name or '')
+            formatted = formatted.replace('{{company}}', company_safe)
+            formatted = formatted.replace('{{company_name}}', company_safe)  # Also handle company_name variant
             # Note: title field doesn't exist in Lead model, so we'll skip it for now
             
             logger.info(f"Formatted message: {formatted}")
@@ -210,10 +228,14 @@ class SequenceEngine:
             
             # Step 2: Send the actual connection request via Unipile
             logger.info(f"Sending connection request to lead {lead.id} via Unipile")
+            
+            # Validate and truncate message if needed
+            validated_message = self.validate_and_truncate_message(message)
+            
             result = unipile.send_connection_request(
                 account_id=linkedin_account.account_id,
                 profile_id=provider_id,
-                message=message
+                message=validated_message
             )
             
             logger.info(f"Unipile connection request result: {result}")
@@ -342,11 +364,15 @@ class SequenceEngine:
             
             # Send the actual message via Unipile
             logger.info(f"Sending message to lead {lead.id} via Unipile")
+            
+            # Validate and truncate message if needed (LinkedIn messages have higher limit)
+            validated_message = self.validate_and_truncate_message(message, max_length=1000)
+            
             try:
                 result = unipile.send_message(
                     account_id=linkedin_account.account_id,
                     conversation_id=conversation_id,
-                    message=message
+                    message=validated_message
                 )
             except Exception:
                 # If sending into an existing chat fails and we have no chat, try starting one by attendee
@@ -354,7 +380,7 @@ class SequenceEngine:
                 result = unipile.start_chat_with_attendee(
                     account_id=linkedin_account.account_id,
                     attendee_provider_id=lead.provider_id,
-                    text=message
+                    text=validated_message
                 )
             
             logger.info(f"Unipile message result: {result}")

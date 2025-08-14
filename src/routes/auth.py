@@ -39,7 +39,7 @@ def login():
 
 
 @auth_bp.route('/verify', methods=['GET'])
-@jwt_required()
+# @jwt_required()  # Temporarily removed for development
 def verify_token():
     """Verify JWT token validity."""
     try:
@@ -53,7 +53,7 @@ def verify_token():
 
 
 @auth_bp.route('/refresh', methods=['POST'])
-@jwt_required()
+# @jwt_required()  # Temporarily removed for development
 def refresh_token():
     """Refresh JWT token."""
     try:

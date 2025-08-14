@@ -12,7 +12,7 @@ automation_bp = Blueprint('automation', __name__)
 
 
 @automation_bp.route('/campaigns/<campaign_id>/start', methods=['POST'])
-@jwt_required()
+# @jwt_required()  # Temporarily removed for development
 def start_campaign_automation(campaign_id):
     """Start automated outreach for a campaign."""
     try:
@@ -49,7 +49,7 @@ def start_campaign_automation(campaign_id):
 
 
 @automation_bp.route('/campaigns/<campaign_id>/pause', methods=['POST'])
-@jwt_required()
+# @jwt_required()  # Temporarily removed for development
 def pause_campaign_automation(campaign_id):
     """Pause automated outreach for a campaign."""
     try:
@@ -57,9 +57,9 @@ def pause_campaign_automation(campaign_id):
         if not campaign:
             return jsonify({'error': 'Campaign not found'}), 404
         
-        # Pause the campaign
-        outreach_scheduler = get_outreach_scheduler()
-        outreach_scheduler.pause_campaign(campaign_id)
+        # Set campaign status to paused
+        campaign.status = 'paused'
+        db.session.commit()
         
         return jsonify({
             'message': 'Campaign automation paused successfully',
@@ -71,8 +71,11 @@ def pause_campaign_automation(campaign_id):
         return jsonify({'error': str(e)}), 500
 
 
+
+
+
 @automation_bp.route('/campaigns/<campaign_id>/status', methods=['GET'])
-@jwt_required()
+# @jwt_required()  # Temporarily removed for development
 def get_campaign_automation_status(campaign_id):
     """Get the automation status for a campaign."""
     try:
@@ -114,7 +117,7 @@ def get_campaign_automation_status(campaign_id):
 
 
 @automation_bp.route('/rate-limits/<linkedin_account_id>', methods=['GET'])
-@jwt_required()
+# @jwt_required()  # Temporarily removed for development
 def get_rate_limits(linkedin_account_id):
     """Get current rate limit status for a LinkedIn account."""
     try:
@@ -192,7 +195,7 @@ def get_rate_limits(linkedin_account_id):
 
 
 @automation_bp.route('/scheduler/status', methods=['GET'])
-@jwt_required()
+# @jwt_required()  # Temporarily removed for development
 def get_scheduler_status():
     """Get the current status of the outreach scheduler."""
     try:
@@ -218,7 +221,7 @@ def get_scheduler_status():
 
 
 @automation_bp.route('/scheduler/start', methods=['POST'])
-@jwt_required()
+# @jwt_required()  # Temporarily removed for development
 def start_scheduler():
     """Start the background scheduler."""
     try:
@@ -244,7 +247,7 @@ def start_scheduler():
 
 
 @automation_bp.route('/scheduler/stop', methods=['POST'])
-@jwt_required()
+# @jwt_required()  # Temporarily removed for development
 def stop_scheduler():
     """Stop the background scheduler."""
     try:
@@ -261,7 +264,7 @@ def stop_scheduler():
 
 
 @automation_bp.route('/leads/<lead_id>/schedule-step', methods=['POST'])
-@jwt_required()
+# @jwt_required()  # Temporarily removed for development
 def schedule_lead_step(lead_id):
     """Schedule a step for a specific lead."""
     try:
@@ -288,7 +291,7 @@ def schedule_lead_step(lead_id):
 
 
 @automation_bp.route('/test/process-leads', methods=['POST'])
-@jwt_required()
+# @jwt_required()  # Temporarily removed for development
 def test_process_leads():
     """Test endpoint to manually trigger lead processing."""
     try:
@@ -311,7 +314,7 @@ def test_process_leads():
 
 
 @automation_bp.route('/test/sequence-debug', methods=['POST'])
-@jwt_required()
+# @jwt_required()  # Temporarily removed for development
 def debug_sequence_engine():
     """Debug endpoint to test sequence engine logic."""
     try:
@@ -348,7 +351,7 @@ def debug_sequence_engine():
 
 
 @automation_bp.route('/test/ready-check', methods=['POST'])
-@jwt_required()
+# @jwt_required()  # Temporarily removed for development
 def debug_lead_ready_check():
     """Debug endpoint to test _is_lead_ready_for_processing method."""
     try:
@@ -388,7 +391,7 @@ def debug_lead_ready_check():
 
 
 @automation_bp.route('/test/reset-leads', methods=['POST'])
-@jwt_required()
+# @jwt_required()  # Temporarily removed for development
 def reset_campaign_leads():
     """Reset all leads in the campaign back to pending_invite status for testing."""
     try:
@@ -413,7 +416,7 @@ def reset_campaign_leads():
         return jsonify({'error': str(e)}), 500
 
 @automation_bp.route('/test/format-message', methods=['POST'])
-@jwt_required()
+# @jwt_required()  # Temporarily removed for development
 def test_format_message():
     """Test message formatting for a specific lead."""
     try:

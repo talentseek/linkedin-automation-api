@@ -376,3 +376,209 @@ Auth: JWT; all endpoints scoped by `client_id` (multi-tenant).
 - Do we need shared team inboxes per client or per campaign queues?
 - Snooze/close semantics and retention (auto-close after inactivity?).
 - Attachment storage strategy (pass-through vs downloading and re-hosting).
+
+---
+
+## 10) PRODUCTION READINESS PLAN (2025-08-14)
+
+**CRITICAL STATUS**: System is currently NOT production-ready due to multiple critical issues. This plan addresses all major gaps to make the system deployable and reliable.
+
+### 🚨 CRITICAL ISSUES TO FIX IMMEDIATELY
+
+#### 1. Scheduler Stop Functionality
+**Problem**: Scheduler stop command doesn't actually stop the scheduler - it continues running and sending messages.
+**Impact**: Cannot control automation, leads to embarrassing duplicate messages and wrong timing.
+**Solution**:
+- Fix scheduler stop mechanism to properly terminate the background thread
+- Add process-level signal handling for graceful shutdown
+- Implement proper thread synchronization and state management
+- Add health checks to verify scheduler status
+
+#### 2. Weekend Operations Hard Stop
+**Problem**: System operates 24/7 including weekends, which is inappropriate for B2B outreach.
+**Impact**: Messages sent on weekends have lower engagement and appear unprofessional.
+**Solution**:
+- Implement weekend detection in scheduler (Saturday/Sunday = no operations)
+- Keep webhooks active for reply detection but pause all outbound automation
+- Add timezone-aware weekend detection per campaign
+- Configurable weekend behavior (hard stop vs reduced frequency)
+
+#### 3. Rate Limit Enforcement
+**Problem**: Rate limits are not consistently enforced, leading to over-sending.
+**Impact**: Account suspension risk, poor deliverability, embarrassing volume.
+**Solution**:
+- Implement strict rate limit checking before ANY outbound action
+- Add rate limit dashboard and monitoring
+- Implement automatic pause when limits are reached
+- Add rate limit recovery mechanisms
+
+#### 4. Personalization Data Corruption
+**Problem**: Lead data gets corrupted during processing, causing wrong names in messages.
+**Impact**: Embarrassing messages like "Hi Chris!" sent to Jonathan.
+**Solution**:
+- Add database transaction isolation
+- Implement lead data validation before personalization
+- Add retry mechanisms for failed personalization
+- Implement comprehensive logging for debugging
+
+### 🔧 CORE SYSTEM IMPROVEMENTS
+
+#### 5. Custom Sequence Delays
+**Problem**: All sequences use fixed 3-day delays, no customization possible.
+**Impact**: One-size-fits-all approach doesn't work for different industries/audiences.
+**Solution**:
+- Add configurable delays per sequence step
+- Default to 3 working days but allow customization
+- Implement working day calculation (exclude weekends/holidays)
+- Add delay validation and reasonable limits
+
+#### 6. Timezone Support
+**Problem**: All operations use UTC, no consideration for campaign timezones.
+**Impact**: Messages sent at wrong times for target audiences.
+**Solution**:
+- Add timezone field to Campaign model
+- Implement timezone-aware scheduling
+- Respect local business hours per campaign
+- Add timezone validation and conversion utilities
+
+#### 7. Code Organization & Refactoring
+**Problem**: Large files (lead.py > 500 lines), poor separation of concerns.
+**Impact**: Hard to maintain, debug, and extend.
+**Solution**:
+- Break large files into smaller, focused modules
+- Implement proper service layer architecture
+- Add comprehensive error handling
+- Improve code documentation and type hints
+
+### 🧹 CLEANUP & OPTIMIZATION
+
+#### 8. Endpoint Optimization
+**Problem**: Many endpoints are inefficient, some are redundant.
+**Impact**: Poor performance, confusing API surface.
+**Solution**:
+- Audit all endpoints for performance bottlenecks
+- Remove redundant and test endpoints
+- Implement proper pagination and filtering
+- Add endpoint response caching where appropriate
+
+#### 9. Test Endpoint Removal
+**Problem**: Production system has many test/debug endpoints exposed.
+**Impact**: Security risk, confusing API surface, potential abuse.
+**Solution**:
+- Remove all test endpoints from production
+- Move debug functionality behind admin-only access
+- Implement proper environment-based feature flags
+- Add comprehensive API documentation
+
+#### 10. Database Optimization
+**Problem**: Database queries are inefficient, no proper indexing.
+**Impact**: Poor performance, especially with large datasets.
+**Solution**:
+- Add proper database indexes
+- Optimize slow queries
+- Implement database connection pooling
+- Add query performance monitoring
+
+### 📚 DOCUMENTATION & API STANDARDS
+
+#### 11. OpenAPI & Swagger Implementation
+**Problem**: No proper API documentation, hard to integrate with.
+**Impact**: Difficult for frontend development and third-party integrations.
+**Solution**:
+- Implement comprehensive OpenAPI 3.0 specification
+- Add Swagger UI for interactive documentation
+- Document all endpoints with examples
+- Add proper error response schemas
+
+#### 12. Code Documentation
+**Problem**: Poor code documentation, hard to understand and maintain.
+**Impact**: Difficult onboarding, maintenance issues.
+**Solution**:
+- Add comprehensive docstrings to all functions
+- Implement proper type hints
+- Create architecture documentation
+- Add deployment and troubleshooting guides
+
+### 🔒 SECURITY & RELIABILITY
+
+#### 13. Authentication & Authorization
+**Problem**: JWT authentication is disabled, no proper access control.
+**Impact**: Security risk, unauthorized access possible.
+**Solution**:
+- Re-enable and fix JWT authentication
+- Implement proper role-based access control
+- Add API key management for third-party integrations
+- Implement proper session management
+
+#### 14. Error Handling & Monitoring
+**Problem**: Poor error handling, no comprehensive monitoring.
+**Impact**: Issues go undetected, poor user experience.
+**Solution**:
+- Implement comprehensive error handling
+- Add structured logging
+- Implement health checks and monitoring
+- Add alerting for critical issues
+
+### 📋 IMPLEMENTATION ROADMAP
+
+#### Phase 1: Critical Fixes (Week 1)
+1. Fix scheduler stop functionality
+2. Implement weekend hard stop
+3. Fix rate limit enforcement
+4. Fix personalization data corruption
+5. Remove test endpoints
+
+#### Phase 2: Core Improvements (Week 2)
+1. Implement custom sequence delays
+2. Add timezone support
+3. Optimize database queries
+4. Implement proper error handling
+
+#### Phase 3: Code Quality (Week 3)
+1. Refactor large files
+2. Implement service layer architecture
+3. Add comprehensive documentation
+4. Implement OpenAPI specification
+
+#### Phase 4: Security & Monitoring (Week 4)
+1. Re-enable authentication
+2. Implement monitoring and alerting
+3. Add comprehensive testing
+4. Performance optimization
+
+### 🎯 SUCCESS CRITERIA
+
+**Production Ready When**:
+- ✅ Scheduler can be reliably started/stopped
+- ✅ No operations on weekends
+- ✅ Rate limits are strictly enforced
+- ✅ Personalization works correctly 100% of the time
+- ✅ All test endpoints removed
+- ✅ Custom delays and timezones supported
+- ✅ Code is well-organized and documented
+- ✅ OpenAPI documentation is complete
+- ✅ Authentication is enabled and working
+- ✅ Monitoring and alerting is in place
+
+### 📊 PRIORITY MATRIX
+
+| Issue | Impact | Effort | Priority |
+|-------|--------|--------|----------|
+| Scheduler Stop | Critical | Medium | P0 |
+| Weekend Stop | High | Low | P0 |
+| Rate Limits | Critical | Medium | P0 |
+| Personalization | Critical | Medium | P0 |
+| Custom Delays | Medium | High | P1 |
+| Timezones | Medium | High | P1 |
+| Code Refactoring | Medium | High | P2 |
+| API Documentation | Low | Medium | P2 |
+
+### 🚀 DEPLOYMENT STRATEGY
+
+1. **Staged Rollout**: Implement fixes in development, then staging, then production
+2. **Feature Flags**: Use environment variables to control new features
+3. **Monitoring**: Implement comprehensive monitoring before each deployment
+4. **Rollback Plan**: Maintain ability to quickly rollback problematic changes
+5. **Testing**: Implement comprehensive testing before each deployment
+
+**This plan will transform the system from a fragile prototype into a production-ready, reliable automation platform.**

@@ -680,6 +680,10 @@ class OutreachScheduler:
                     pass
                 
                 # Execute the step
+                # CRITICAL FIX: Refresh the lead object from database to ensure correct data
+                db.session.refresh(lead)
+                logger.info(f"Refreshed lead data: ID={lead.id}, first_name='{lead.first_name}', last_name='{lead.last_name}'")
+                
                 result = self._get_sequence_engine().execute_step(lead, next_step, linkedin_account)
                 
                 if result['success']:

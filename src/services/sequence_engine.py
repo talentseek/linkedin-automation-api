@@ -150,6 +150,16 @@ class SequenceEngine:
     def execute_step(self, lead: Lead, step: Dict[str, Any], linkedin_account) -> Dict[str, Any]:
         """Execute a step for a lead."""
         try:
+            # CRITICAL SAFETY CHECK: Ensure lead object is valid
+            if not lead or not lead.id or not lead.first_name:
+                logger.error(f"Invalid lead object passed to execute_step: {lead}")
+                return {
+                    'success': False,
+                    'error': 'Invalid lead object'
+                }
+            
+            logger.info(f"Executing step for lead: ID={lead.id}, first_name='{lead.first_name}', last_name='{lead.last_name}'")
+            
             action_type = step.get('action_type')
             message = step.get('message', '')
             

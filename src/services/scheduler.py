@@ -546,6 +546,7 @@ class OutreachScheduler:
                         messages_by_acct[acct_id] += 1
                 # Upsert into RateUsage
                 from src.models.rate_usage import RateUsage
+                import uuid
                 for acct_id in set(list(invites_by_acct.keys()) + list(messages_by_acct.keys())):
                     # Get or create row
                     row = (
@@ -555,7 +556,7 @@ class OutreachScheduler:
                     )
                     if not row:
                         row = RateUsage(
-                            id=str(db.func.uuid()),
+                            id=str(uuid.uuid4()),
                             linkedin_account_id=acct_id,
                             usage_date=yesterday,
                             invites_sent=0,

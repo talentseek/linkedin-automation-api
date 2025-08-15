@@ -54,6 +54,8 @@ def create_app(config_name=None):
         app.logger.info("Registered auth blueprint")
     except Exception as e:
         app.logger.error(f"Failed to register auth blueprint: {str(e)}")
+        import traceback
+        app.logger.error(f"Auth blueprint error traceback: {traceback.format_exc()}")
     
     try:
         from src.routes.client import client_bp
@@ -61,6 +63,8 @@ def create_app(config_name=None):
         app.logger.info("Registered client blueprint")
     except Exception as e:
         app.logger.error(f"Failed to register client blueprint: {str(e)}")
+        import traceback
+        app.logger.error(f"Client blueprint error traceback: {traceback.format_exc()}")
     
     try:
         from src.routes.campaign import campaign_bp

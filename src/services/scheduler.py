@@ -74,11 +74,56 @@ class OutreachScheduler:
     
     def stop(self):
         """Stop the background processing thread."""
-        if self.running:
+        if not self.running:
+            logger.info("Scheduler is already stopped")
+            return
+        
+        logger.info("Stopping scheduler...")
+        self.running = False
+        
+        if self.thread and self.thread.is_alive():
+            # Wait for thread to finish with a longer timeout
+            logger.info("Waiting for scheduler thread to terminate...")
+            self.thread.join(timeout=30)  # Increased timeout to 30 seconds
+            
+            if self.thread.is_alive():
+                logger.warning("Scheduler thread did not terminate gracefully within 30 seconds")
+                # Force thread termination if needed
+                import ctypes
+                try:
+                    thread_id = self.thread.ident
+                    if thread_id:
+                        res = ctypes.pythonapi.PyThreadState_SetAsyncExc(ctypes.c_long(thread_id), ctypes.py_object(SystemExit))
+                        if res > 1:
+                            ctypes.pythonapi.PyThreadState_SetAsyncExc(thread_id, 0)
+                            logger.error("Failed to terminate scheduler thread")
+                        else:
+                            logger.info("Forced scheduler thread termination")
+                except Exception as e:
+                    logger.error(f"Error forcing thread termination: {str(e)}")
+            else:
+                logger.info("Scheduler thread terminated gracefully")
+        
+        # Reset thread reference
+        self.thread = None
+        logger.info("Outreach scheduler stopped successfully")
+    
+    def is_running(self):
+        """Check if the scheduler is currently running."""
+        if not self.running:
+            return False
+        
+        if self.thread and self.thread.is_alive():
+            return True
+        
+        # If thread is dead but running flag is True, reset the state
+        if self.running and (not self.thread or not self.thread.is_alive()):
+            logger.warning("Scheduler state inconsistent - thread dead but running=True, resetting")
             self.running = False
-            if self.thread:
-                self.thread.join(timeout=5)
-            logger.info("Outreach scheduler stopped")
+            self.thread = None
+            return False
+        
+        return False
     
     def _process_loop(self):
         """Main processing loop that runs continuously."""
@@ -86,16 +131,24 @@ class OutreachScheduler:
         
         while self.running:
             try:
-                # Process pending leads every 5 minutes
-                self.process_pending_leads()
-                
-                # Reset daily counters at midnight
-                self._check_and_reset_daily_counters()
-                # Run nightly maintenance once per day after configured hour
-                self._maybe_run_nightly_backfills()
-                
-                # Periodic connection detection check (every 2 hours)
-                self._maybe_check_for_new_connections()
+                # Check if it's weekend - if so, skip all outbound operations
+                if self._is_weekend():
+                    logger.info("Weekend detected - skipping outbound operations, keeping webhooks active")
+                    # Still run maintenance tasks but skip lead processing
+                    self._check_and_reset_daily_counters()
+                    self._maybe_run_nightly_backfills()
+                    # Skip: process_pending_leads, _maybe_check_for_new_connections
+                else:
+                    # Process pending leads every 5 minutes
+                    self.process_pending_leads()
+                    
+                    # Reset daily counters at midnight
+                    self._check_and_reset_daily_counters()
+                    # Run nightly maintenance once per day after configured hour
+                    self._maybe_run_nightly_backfills()
+                    
+                    # Periodic connection detection check (every 2 hours)
+                    self._maybe_check_for_new_connections()
                 
                 # Sleep for 60 seconds before next iteration to reduce latency for new events
                 time.sleep(60)  # 1 minute
@@ -915,6 +968,17 @@ class OutreachScheduler:
             3: 12960    # Third message - 9 working days (9 * 24 * 60 = 12960 minutes)
         }
         return delays.get(step_number, 0)
+
+    def _is_weekend(self):
+        """Check if current time is weekend (Saturday or Sunday)."""
+        try:
+            # Use UTC time for consistency
+            utc_now = datetime.utcnow()
+            # Monday = 0, Sunday = 6, so Saturday = 5, Sunday = 6
+            return utc_now.weekday() >= 5  # Saturday (5) or Sunday (6)
+        except Exception as e:
+            logger.error(f"Error checking weekend status: {str(e)}")
+            return False  # Default to not weekend if error
 
 # Global scheduler instance - created lazily
 _outreach_scheduler = None

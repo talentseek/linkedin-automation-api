@@ -201,7 +201,10 @@ def get_scheduler_status():
     try:
         outreach_scheduler = get_outreach_scheduler()
         
-        # Reflect thread-based scheduler state
+        # Use the new is_running() method for accurate status
+        is_running = outreach_scheduler.is_running()
+        
+        # Get thread status for debugging
         thread_alive = False
         if outreach_scheduler and hasattr(outreach_scheduler, 'thread') and outreach_scheduler.thread is not None:
             try:
@@ -210,9 +213,10 @@ def get_scheduler_status():
                 thread_alive = False
         
         return jsonify({
-            'status': 'running' if (outreach_scheduler and getattr(outreach_scheduler, 'running', False)) else 'stopped',
-            'running': bool(outreach_scheduler and getattr(outreach_scheduler, 'running', False)),
-            'thread_alive': thread_alive
+            'status': 'running' if is_running else 'stopped',
+            'running': is_running,
+            'thread_alive': thread_alive,
+            'state_consistent': is_running == thread_alive
         }), 200
         
     except Exception as e:
@@ -260,6 +264,34 @@ def stop_scheduler():
             return jsonify({'message': 'Scheduler is not running'}), 200
     except Exception as e:
         logger.error(f"Error stopping scheduler: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@automation_bp.route('/scheduler/weekend-status', methods=['GET'])
+# @jwt_required()  # Temporarily removed for development
+def get_weekend_status():
+    """Get the current weekend status and scheduler behavior."""
+    try:
+        outreach_scheduler = get_outreach_scheduler()
+        
+        # Check if it's currently weekend
+        is_weekend = outreach_scheduler._is_weekend()
+        
+        # Get current UTC time for reference
+        from datetime import datetime
+        utc_now = datetime.utcnow()
+        
+        return jsonify({
+            'is_weekend': is_weekend,
+            'current_time_utc': utc_now.isoformat(),
+            'weekday': utc_now.weekday(),  # 0=Monday, 6=Sunday
+            'weekday_name': ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'][utc_now.weekday()],
+            'scheduler_behavior': 'weekend_mode' if is_weekend else 'normal_mode',
+            'description': 'Outbound operations paused, webhooks active' if is_weekend else 'Normal operations'
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error getting weekend status: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 

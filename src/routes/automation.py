@@ -573,3 +573,33 @@ def simple_test_notification():
         logger.error(f"Error in simple test notification: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
+
+@automation_bp.route('/weekly-stats/test-simple', methods=['POST'])
+# @jwt_required()  # Temporarily removed for development
+def test_weekly_statistics_simple():
+    """Simple test for weekly statistics."""
+    try:
+        data = request.get_json()
+        client_id = data.get('client_id')
+        test_email = data.get('test_email', 'michael@costperdemo.com')
+        
+        if not client_id:
+            return jsonify({'error': 'client_id is required'}), 400
+        
+        from src.services.weekly_statistics import get_weekly_statistics_service
+        
+        service = get_weekly_statistics_service()
+        success = service.send_weekly_report(client_id, test_email)
+        
+        if success:
+            return jsonify({
+                'message': f'Test weekly report sent to {test_email}',
+                'test_email': test_email
+            }), 200
+        else:
+            return jsonify({'error': 'Failed to send test weekly report'}), 500
+            
+    except Exception as e:
+        logger.error(f"Error testing weekly statistics: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+

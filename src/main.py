@@ -34,6 +34,19 @@ def create_app(config_name=None):
     db.init_app(app)
     jwt.init_app(app)
     
+    # Configure logging first so we can see route registration errors
+    if not app.debug:
+        if not os.path.exists('logs'):
+            os.mkdir('logs')
+        file_handler = logging.FileHandler('logs/linkedin_automation.log')
+        file_handler.setFormatter(logging.Formatter(
+            '%(asctime)s %(levelname)s: %(message)s [in %(pathname)s:%(lineno)d]'
+        ))
+        file_handler.setLevel(logging.INFO)
+        app.logger.addHandler(file_handler)
+        app.logger.setLevel(logging.INFO)
+        app.logger.info('LinkedIn Automation API startup')
+    
     # Register blueprints with error handling
     try:
         from src.routes.auth import auth_bp
@@ -151,18 +164,7 @@ def create_app(config_name=None):
     except Exception as e:
         app.logger.error(f"Failed to create/verify database tables on startup: {str(e)}")
     
-    # Configure logging
-    if not app.debug:
-        if not os.path.exists('logs'):
-            os.mkdir('logs')
-        file_handler = logging.FileHandler('logs/linkedin_automation.log')
-        file_handler.setFormatter(logging.Formatter(
-            '%(asctime)s %(levelname)s: %(message)s [in %(pathname)s:%(lineno)d]'
-        ))
-        file_handler.setLevel(logging.INFO)
-        app.logger.addHandler(file_handler)
-        app.logger.setLevel(logging.INFO)
-        app.logger.info('LinkedIn Automation API startup')
+
     
     # Serve static files - moved to end to avoid overriding API routes
     @app.route('/')

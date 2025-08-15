@@ -115,14 +115,6 @@ def create_app(config_name=None):
     def static_files(filename):
         return send_from_directory('static', filename)
     
-    # Only serve other static files if they exist and are not API routes
-    @app.route('/<path:filename>')
-    def other_static_files(filename):
-        # Don't serve files that start with 'api'
-        if filename.startswith('api/'):
-            return jsonify({'error': 'API endpoint not found'}), 404
-        return send_from_directory('static', filename)
-    
     return app
 
 # Create the application instance

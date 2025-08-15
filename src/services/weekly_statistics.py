@@ -82,7 +82,11 @@ class WeeklyStatisticsService:
                 campaign_events = [e for e in events if e.lead_id in [l.id for l in campaign_leads]]
                 
                 campaign_stat = {
-                    'campaign': campaign,
+                    'campaign': {
+                        'id': campaign.id,
+                        'name': campaign.name,
+                        'status': campaign.status
+                    },
                     'total_leads': len(campaign_leads),
                     'new_leads': len([l for l in campaign_leads if l.status in ['pending_invite', 'invite_sent', 'invited']]),
                     'connections': len([l for l in campaign_leads if l.status in ['connected', 'messaged', 'responded', 'completed']]),
@@ -98,8 +102,15 @@ class WeeklyStatisticsService:
             recent_events = [e for e in events if e.timestamp >= recent_start]
             
             return {
-                'client': client,
-                'period': {'start': start_date, 'end': end_date},
+                'client': {
+                    'id': client.id,
+                    'name': client.name,
+                    'email': client.email
+                },
+                'period': {
+                    'start': start_date.isoformat(),
+                    'end': end_date.isoformat()
+                },
                 'campaigns': campaign_stats,
                 'summary': {
                     'total_leads': total_leads,

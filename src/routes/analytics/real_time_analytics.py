@@ -64,7 +64,7 @@ def real_time_activity():
         events_by_campaign = db.session.query(
             Campaign.name.label('campaign_name'),
             func.count(Event.id).label('event_count')
-        ).join(Lead).join(Event).filter(
+        ).select_from(Campaign).join(Lead, Campaign.id == Lead.campaign_id).join(Event, Lead.id == Event.lead_id).filter(
             Event.timestamp >= start_time
         ).group_by(Campaign.name).order_by(desc(func.count(Event.id))).limit(10).all()
         

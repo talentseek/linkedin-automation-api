@@ -21,7 +21,8 @@ def webhook_health():
     """Health check endpoint for webhooks."""
     try:
         # Check database connectivity
-        db.session.execute('SELECT 1')
+        from sqlalchemy import text
+        db.session.execute(text('SELECT 1'))
         
         # Get recent webhook activity
         recent_webhooks = WebhookData.query.filter(

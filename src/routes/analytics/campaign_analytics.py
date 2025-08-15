@@ -18,6 +18,7 @@ from sqlalchemy.orm import joinedload
 from src.extensions import db
 from src.models import Campaign, Lead, Event, LinkedInAccount, Client
 from src.models.rate_usage import RateUsage
+from .core import _calculate_conversion_funnel, _calculate_time_based_analytics, _calculate_predictive_analytics
 
 logger = logging.getLogger(__name__)
 

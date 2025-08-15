@@ -22,6 +22,32 @@ from src.models import Lead, LinkedInAccount, Campaign, Event
 from src.services.sequence_engine import SequenceEngine
 from src.models.rate_usage import RateUsage
 
+# Import methods from separate modules
+from .rate_limiting import (
+    _get_today_usage_counts,
+    _can_send_invite_for_account,
+    _can_send_message_for_account,
+    _increment_usage,
+    _reset_daily_counters
+)
+from .lead_processor import (
+    _is_lead_ready_for_processing,
+    _process_single_lead,
+    _get_step_number,
+    _get_required_delay_for_step
+)
+from .connection_checker import (
+    _check_single_account_relations,
+    _process_relation,
+    _check_sent_invitations,
+    _process_sent_invitation
+)
+from .nightly_jobs import (
+    _maybe_run_nightly_backfills,
+    _run_conversation_id_backfill,
+    _run_rate_usage_backfill
+)
+
 logger = logging.getLogger(__name__)
 
 # Global scheduler instance
@@ -60,6 +86,71 @@ class OutreachScheduler:
         
         if app is not None:
             self.init_app(app)
+    
+    # Add the missing methods as class methods
+    def _get_today_usage_counts(self, provider_account_id: str) -> dict:
+        """Get today's usage counts for a LinkedIn account."""
+        return _get_today_usage_counts(provider_account_id)
+    
+    def _can_send_invite_for_account(self, provider_account_id: str) -> bool:
+        """Check if we can send an invite for a LinkedIn account."""
+        return _can_send_invite_for_account(provider_account_id)
+    
+    def _can_send_message_for_account(self, provider_account_id: str) -> bool:
+        """Check if we can send a message for a LinkedIn account."""
+        return _can_send_message_for_account(provider_account_id)
+    
+    def _increment_usage(self, provider_account_id: str, action_type: str):
+        """Increment usage for a LinkedIn account."""
+        return _increment_usage(provider_account_id, action_type)
+    
+    def _reset_daily_counters(self):
+        """Reset daily counters."""
+        return _reset_daily_counters()
+    
+    def _is_lead_ready_for_processing(self, lead: Lead) -> bool:
+        """Check if a lead is ready for processing."""
+        return _is_lead_ready_for_processing(lead)
+    
+    def _process_single_lead(self, lead: Lead):
+        """Process a single lead."""
+        return _process_single_lead(self, lead)
+    
+    def _get_step_number(self, lead: Lead) -> int:
+        """Get the current step number for a lead."""
+        return _get_step_number(lead)
+    
+    def _get_required_delay_for_step(self, step_number: int) -> int:
+        """Get the required delay for a step."""
+        return _get_required_delay_for_step(step_number)
+    
+    def _check_single_account_relations(self, linkedin_account: LinkedInAccount):
+        """Check relations for a single LinkedIn account."""
+        return _check_single_account_relations(self, linkedin_account)
+    
+    def _process_relation(self, relation_data: dict, linkedin_account: LinkedInAccount):
+        """Process a relation."""
+        return _process_relation(self, relation_data, linkedin_account)
+    
+    def _check_sent_invitations(self, linkedin_account: LinkedInAccount):
+        """Check sent invitations for a LinkedIn account."""
+        return _check_sent_invitations(self, linkedin_account)
+    
+    def _process_sent_invitation(self, invitation_data: dict, linkedin_account: LinkedInAccount):
+        """Process a sent invitation."""
+        return _process_sent_invitation(self, invitation_data, linkedin_account)
+    
+    def _maybe_run_nightly_backfills(self):
+        """Maybe run nightly backfills."""
+        return _maybe_run_nightly_backfills(self)
+    
+    def _run_conversation_id_backfill(self):
+        """Run conversation ID backfill."""
+        return _run_conversation_id_backfill()
+    
+    def _run_rate_usage_backfill(self):
+        """Run rate usage backfill."""
+        return _run_rate_usage_backfill()
     
     def _get_sequence_engine(self):
         """Get sequence engine instance (lazy initialization)."""
@@ -260,8 +351,3 @@ class OutreachScheduler:
                     # The lead will be processed in the next iteration
         except Exception as e:
             logger.error(f"Error scheduling lead step: {str(e)}")
-    
-    # Import other modules for functionality
-    from .connection_checker import _check_single_account_relations
-    from .lead_processor import _process_single_lead, _is_lead_ready_for_processing
-    from .nightly_jobs import _maybe_run_nightly_backfills

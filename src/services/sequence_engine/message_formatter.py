@@ -11,7 +11,7 @@ This module contains functionality for:
 import logging
 import re
 from typing import Dict, Any
-from src.models import Lead
+from src.models import Lead, db
 
 logger = logging.getLogger(__name__)
 

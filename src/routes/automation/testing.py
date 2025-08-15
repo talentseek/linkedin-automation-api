@@ -1,6 +1,11 @@
 """
 Testing and debugging endpoints.
 
+⚠️  SECURITY WARNING: All test endpoints should be SIMULATION ONLY.
+⚠️  NO REAL MESSAGES OR CONNECTION REQUESTS should be sent during testing.
+⚠️  All test endpoints must be disabled in production.
+"""
+
 This module contains functionality for:
 - Lead processing tests
 - Sequence debugging
@@ -258,7 +263,7 @@ def test_format_message():
 
 @automation_bp.route('/test/execute-step', methods=['POST'])
 def test_execute_step():
-    """Test executing a step for a lead."""
+    """Test executing a step for a lead (SIMULATION ONLY - NO REAL ACTIONS)."""
     try:
         data = request.get_json() or {}
         lead_id = data.get('lead_id')
@@ -288,15 +293,33 @@ def test_execute_step():
         # Get sequence engine
         sequence_engine = SequenceEngine()
         
-        # Execute step
-        result = sequence_engine.execute_step(lead, step_data, linkedin_account)
+        # SIMULATION ONLY - Format message but don't send
+        action_type = step_data.get('action_type')
+        message = step_data.get('message', '')
+        formatted_message = sequence_engine._format_message(message, lead)
+        
+        # Create simulation result
+        simulation_result = {
+            'success': True,
+            'simulation': True,
+            'action_type': action_type,
+            'original_message': message,
+            'formatted_message': formatted_message,
+            'would_send_to': {
+                'lead_id': lead.id,
+                'lead_name': f"{lead.first_name} {lead.last_name}",
+                'linkedin_account': linkedin_account.account_id
+            },
+            'note': 'This was a simulation - no real message was sent'
+        }
         
         return jsonify({
             'lead_id': lead_id,
             'step_data': step_data,
-            'result': result,
+            'result': simulation_result,
             'lead_status_after': lead.status,
-            'current_step_after': lead.current_step
+            'current_step_after': lead.current_step,
+            'simulation': True
         })
         
     except Exception as e:

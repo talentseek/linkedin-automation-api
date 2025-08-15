@@ -50,7 +50,12 @@ def register_webhook():
         
         # Use Unipile API to register webhook
         unipile = UnipileClient()
-        webhook = unipile.create_webhook(request_url=url, events=events)
+        webhook = unipile.create_webhook(
+            request_url=url, 
+            webhook_type="messaging",
+            name="LinkedIn Webhook",
+            events=events
+        )
         
         return jsonify({
             'message': 'Webhook registered successfully',
@@ -100,9 +105,14 @@ def configure_unified_webhook():
             if webhook.get('request_url') == webhook_url:
                 unipile.delete_webhook(webhook.get('id'))
         
-        # Register new unified webhook
-        events = ['new_relation', 'message_received', 'message_read', 'account_status']
-        webhook = unipile.create_webhook(request_url=webhook_url, events=events)
+        # Register new unified webhook for messaging events
+        messaging_events = ['message_received', 'message_read', 'message_reaction', 'message_edited', 'message_deleted']
+        webhook = unipile.create_webhook(
+            request_url=webhook_url, 
+            webhook_type="messaging",
+            name="LinkedIn Messaging Monitor",
+            events=messaging_events
+        )
         
         return jsonify({
             'message': 'Unified webhook configured successfully',

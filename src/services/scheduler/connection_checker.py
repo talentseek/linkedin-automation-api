@@ -15,7 +15,7 @@ from src.services.unipile_client import UnipileClient
 logger = logging.getLogger(__name__)
 
 
-def _check_single_account_relations(self, account_id, unipile):
+def _check_single_account_relations(account_id, unipile):
     """Check relations for a single account and process new connections."""
     try:
         logger.info(f"Checking relations for account: {account_id}")
@@ -32,19 +32,19 @@ def _check_single_account_relations(self, account_id, unipile):
         # Process each relation
         for relation in relations:
             try:
-                self._process_relation(relation, account_id)
+                _process_relation(relation, account_id)
             except Exception as e:
                 logger.error(f"Error processing relation: {str(e)}")
                 continue
         
         # Also check sent invitations
-        self._check_sent_invitations(account_id, unipile)
+        _check_sent_invitations(account_id, unipile)
         
     except Exception as e:
         logger.error(f"Error checking relations for account {account_id}: {str(e)}")
 
 
-def _process_relation(self, relation, account_id):
+def _process_relation(relation, account_id):
     """Process a single relation."""
     try:
         # Extract relation data
@@ -93,7 +93,7 @@ def _process_relation(self, relation, account_id):
         db.session.rollback()
 
 
-def _check_sent_invitations(self, account_id, unipile):
+def _check_sent_invitations(account_id, unipile):
     """Check sent invitations and update lead statuses."""
     try:
         logger.info(f"Checking sent invitations for account: {account_id}")
@@ -110,7 +110,7 @@ def _check_sent_invitations(self, account_id, unipile):
         # Process each invitation
         for invitation in invitations:
             try:
-                self._process_sent_invitation(invitation, account_id)
+                _process_sent_invitation(invitation, account_id)
             except Exception as e:
                 logger.error(f"Error processing invitation: {str(e)}")
                 continue
@@ -119,7 +119,7 @@ def _check_sent_invitations(self, account_id, unipile):
         logger.error(f"Error checking sent invitations for account {account_id}: {str(e)}")
 
 
-def _process_sent_invitation(self, invitation, account_id):
+def _process_sent_invitation(invitation, account_id):
     """Process a single sent invitation."""
     try:
         # Extract invitation data

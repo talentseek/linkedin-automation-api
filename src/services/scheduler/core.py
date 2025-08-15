@@ -127,21 +127,21 @@ class OutreachScheduler:
     
     def _check_single_account_relations(self, linkedin_account: LinkedInAccount):
         """Check relations for a single LinkedIn account."""
-        return _check_single_account_relations(self, linkedin_account)
+        return _check_single_account_relations(linkedin_account.account_id, UnipileClient())
     
     def _process_relation(self, relation_data: dict, linkedin_account: LinkedInAccount):
         """Process a relation."""
-        return _process_relation(self, relation_data, linkedin_account.account_id)
+        return _process_relation(relation_data, linkedin_account.account_id)
     
     def _check_sent_invitations(self, linkedin_account: LinkedInAccount):
         """Check sent invitations for a LinkedIn account."""
         # Get Unipile client
         unipile = UnipileClient()
-        return _check_sent_invitations(self, linkedin_account.account_id, unipile)
+        return _check_sent_invitations(linkedin_account.account_id, unipile)
     
     def _process_sent_invitation(self, invitation_data: dict, linkedin_account: LinkedInAccount):
         """Process a sent invitation."""
-        return _process_sent_invitation(self, invitation_data, linkedin_account)
+        return _process_sent_invitation(invitation_data, linkedin_account.account_id)
     
     def _maybe_run_nightly_backfills(self):
         """Maybe run nightly backfills."""

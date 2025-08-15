@@ -512,3 +512,154 @@ def account_rate_usage(linkedin_account_id: str):
         return jsonify({"error": str(e)}), 500
 
 
+@analytics_bp.route('/weekly-stats/generate', methods=['POST'])
+# @jwt_required()  # Temporarily removed for development
+def generate_weekly_statistics():
+    """Generate and send weekly statistics for a specific client."""
+    try:
+        data = request.get_json()
+        client_id = data.get('client_id')
+        recipient_email = data.get('recipient_email')
+        
+        if not client_id:
+            return jsonify({'error': 'client_id is required'}), 400
+        
+        from src.services.weekly_statistics import get_weekly_statistics_service
+        
+        service = get_weekly_statistics_service()
+        success = service.send_weekly_report(client_id, recipient_email)
+        
+        if success:
+            return jsonify({'message': 'Weekly report sent successfully'}), 200
+        else:
+            return jsonify({'error': 'Failed to send weekly report'}), 500
+            
+    except Exception as e:
+        logger.error(f"Error generating weekly statistics: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@analytics_bp.route('/weekly-stats/send-all', methods=['POST'])
+# @jwt_required()  # Temporarily removed for development
+def send_all_weekly_reports():
+    """Send weekly reports to all active clients."""
+    try:
+        from src.services.weekly_statistics import get_weekly_statistics_service
+        
+        service = get_weekly_statistics_service()
+        results = service.send_all_weekly_reports()
+        
+        successful = sum(results.values())
+        total = len(results)
+        
+        return jsonify({
+            'message': f'Sent weekly reports to {successful}/{total} clients',
+            'results': results,
+            'successful': successful,
+            'total': total
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error sending all weekly reports: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@analytics_bp.route('/weekly-stats/preview/<client_id>', methods=['GET'])
+# @jwt_required()  # Temporarily removed for development
+def preview_weekly_statistics(client_id):
+    """Preview weekly statistics for a client without sending email."""
+    try:
+        from datetime import datetime, timedelta
+        from src.services.weekly_statistics import get_weekly_statistics_service
+        
+        # Calculate date range (last 7 days)
+        end_date = datetime.utcnow()
+        start_date = end_date - timedelta(days=7)
+        
+        service = get_weekly_statistics_service()
+        stats = service.generate_client_statistics(client_id, start_date, end_date)
+        
+        if not stats:
+            return jsonify({'error': 'Failed to generate statistics'}), 500
+        
+        return jsonify({
+            'client': {
+                'id': stats['client'].id,
+                'name': stats['client'].name,
+                'email': stats['client'].email
+            },
+            'period': {
+                'start': stats['period']['start'].isoformat(),
+                'end': stats['period']['end'].isoformat()
+            },
+            'summary': stats['summary'],
+            'campaigns': [
+                {
+                    'id': campaign_stat['campaign'].id,
+                    'name': campaign_stat['campaign'].name,
+                    'status': campaign_stat['campaign'].status,
+                    'total_leads': campaign_stat['total_leads'],
+                    'connections': campaign_stat['connections'],
+                    'replies': campaign_stat['replies'],
+                    'conversion_rate': campaign_stat['conversion_rate']
+                }
+                for campaign_stat in stats['campaigns']
+            ],
+            'recent_activity': stats['recent_activity']
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error previewing weekly statistics: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@analytics_bp.route('/weekly-stats/settings', methods=['GET'])
+# @jwt_required()  # Temporarily removed for development
+def get_weekly_stats_settings():
+    """Get weekly statistics settings."""
+    try:
+        from src.services.weekly_statistics import get_weekly_statistics_service
+        
+        service = get_weekly_statistics_service()
+        
+        return jsonify({
+            'enabled': service.enabled,
+            'from_email': service.from_email,
+            'resend_configured': bool(service.resend_api_key)
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error getting weekly stats settings: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@analytics_bp.route('/weekly-stats/test', methods=['POST'])
+# @jwt_required()  # Temporarily removed for development
+def test_weekly_statistics():
+    """Test weekly statistics by sending a sample report."""
+    try:
+        data = request.get_json()
+        client_id = data.get('client_id')
+        test_email = data.get('test_email', 'michael@costperdemo.com')
+        
+        if not client_id:
+            return jsonify({'error': 'client_id is required'}), 400
+        
+        from src.services.weekly_statistics import get_weekly_statistics_service
+        
+        service = get_weekly_statistics_service()
+        success = service.send_weekly_report(client_id, test_email)
+        
+        if success:
+            return jsonify({
+                'message': f'Test weekly report sent to {test_email}',
+                'test_email': test_email
+            }), 200
+        else:
+            return jsonify({'error': 'Failed to send test weekly report'}), 500
+            
+    except Exception as e:
+        logger.error(f"Error testing weekly statistics: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+

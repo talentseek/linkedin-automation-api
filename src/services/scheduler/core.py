@@ -297,7 +297,7 @@ class OutreachScheduler:
             from src.services.unipile_client import UnipileClient
             
             unipile = UnipileClient()
-            self._check_single_account_relations(linkedin_account.account_id, unipile)
+            _check_single_account_relations(self, linkedin_account.account_id, unipile)
             
         except Exception as e:
             logger.error(f"Error checking relations for account {linkedin_account.account_id}: {str(e)}")

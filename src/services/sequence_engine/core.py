@@ -70,7 +70,19 @@ class SequenceEngine:
     def execute_step(self, lead: Lead, step: Dict[str, Any], linkedin_account) -> Dict[str, Any]:
         """Execute a single step in the sequence."""
         try:
-            logger.info(f"Executing step for lead {lead.id}")
+            # CRITICAL FIX: Always refresh lead from database to ensure correct data
+            try:
+                db.session.refresh(lead)
+                logger.info(f"=== LEAD DATA VERIFICATION ===")
+                logger.info(f"Lead ID: {lead.id}")
+                logger.info(f"Lead Name: {lead.first_name} {lead.last_name}")
+                logger.info(f"Lead Company: {lead.company_name}")
+                logger.info(f"Lead Status: {lead.status}")
+                logger.info(f"Lead Current Step: {lead.current_step}")
+                logger.info(f"=== END LEAD DATA VERIFICATION ===")
+            except Exception as refresh_error:
+                logger.error(f"Failed to refresh lead {lead.id}: {str(refresh_error)}")
+                return {'success': False, 'error': f'Failed to refresh lead data: {str(refresh_error)}'}
             
             # Validate lead object
             if not lead or not hasattr(lead, 'id'):

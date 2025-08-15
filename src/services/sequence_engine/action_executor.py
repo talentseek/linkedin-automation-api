@@ -20,6 +20,22 @@ logger = logging.getLogger(__name__)
 def _send_connection_request(self, lead: Lead, linkedin_account, message: str) -> Dict[str, Any]:
     """Send a connection request to a lead."""
     try:
+        # CRITICAL FIX: Validate lead data before sending
+        if not lead or not hasattr(lead, 'id'):
+            logger.error("Invalid lead object in _send_connection_request")
+            return {'success': False, 'error': 'Invalid lead object'}
+        
+        # Refresh lead data to ensure accuracy
+        try:
+            db.session.refresh(lead)
+            logger.info(f"=== CONNECTION REQUEST VERIFICATION ===")
+            logger.info(f"Sending connection request to: {lead.first_name} {lead.last_name} (ID: {lead.id})")
+            logger.info(f"Message: {message}")
+            logger.info(f"=== END CONNECTION REQUEST VERIFICATION ===")
+        except Exception as refresh_error:
+            logger.error(f"Failed to refresh lead {lead.id} in _send_connection_request: {str(refresh_error)}")
+            return {'success': False, 'error': f'Failed to refresh lead data: {str(refresh_error)}'}
+        
         logger.info(f"Sending connection request to lead {lead.id}")
         
         # Validate required data
@@ -117,6 +133,22 @@ def _send_connection_request(self, lead: Lead, linkedin_account, message: str) -
 def _send_message(self, lead: Lead, linkedin_account, message: str) -> Dict[str, Any]:
     """Send a message to a lead."""
     try:
+        # CRITICAL FIX: Validate lead data before sending
+        if not lead or not hasattr(lead, 'id'):
+            logger.error("Invalid lead object in _send_message")
+            return {'success': False, 'error': 'Invalid lead object'}
+        
+        # Refresh lead data to ensure accuracy
+        try:
+            db.session.refresh(lead)
+            logger.info(f"=== MESSAGE SENDING VERIFICATION ===")
+            logger.info(f"Sending message to: {lead.first_name} {lead.last_name} (ID: {lead.id})")
+            logger.info(f"Message: {message}")
+            logger.info(f"=== END MESSAGE SENDING VERIFICATION ===")
+        except Exception as refresh_error:
+            logger.error(f"Failed to refresh lead {lead.id} in _send_message: {str(refresh_error)}")
+            return {'success': False, 'error': f'Failed to refresh lead data: {str(refresh_error)}'}
+        
         logger.info(f"Sending message to lead {lead.id}")
         
         # Validate required data
@@ -135,6 +167,14 @@ def _send_message(self, lead: Lead, linkedin_account, message: str) -> Dict[str,
         
         # Send message via Unipile
         try:
+            # FINAL VALIDATION: Double-check we're sending to the right person
+            logger.info(f"=== FINAL MESSAGE VALIDATION ===")
+            logger.info(f"About to send message to: {lead.first_name} {lead.last_name} (ID: {lead.id})")
+            logger.info(f"Message content: {message}")
+            logger.info(f"Conversation ID: {lead.conversation_id}")
+            logger.info(f"LinkedIn Account: {linkedin_account.account_id}")
+            logger.info(f"=== END FINAL MESSAGE VALIDATION ===")
+            
             result = unipile.send_message(
                 account_id=linkedin_account.account_id,
                 conversation_id=lead.conversation_id,

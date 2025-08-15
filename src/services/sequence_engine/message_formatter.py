@@ -19,6 +19,18 @@ logger = logging.getLogger(__name__)
 def _format_message(self, message: str, lead: Lead) -> str:
     """Format a message by replacing placeholders with lead data."""
     try:
+        # CRITICAL FIX: Validate lead object and refresh from database
+        if not lead or not hasattr(lead, 'id'):
+            logger.error("Invalid lead object passed to _format_message")
+            return message
+        
+        # Always refresh lead data to ensure we have the latest information
+        try:
+            db.session.refresh(lead)
+        except Exception as refresh_error:
+            logger.error(f"Failed to refresh lead {lead.id} in _format_message: {str(refresh_error)}")
+            return message
+        
         logger.info(f"=== PERSONALIZATION DEBUG START ===")
         logger.info(f"Lead ID: {lead.id}")
         logger.info(f"Lead first_name: '{lead.first_name}'")
@@ -52,6 +64,15 @@ def _format_message(self, message: str, lead: Lead) -> str:
             if placeholder in formatted_message:
                 formatted_message = formatted_message.replace(placeholder, str(value))
                 logger.info(f"Replaced {placeholder} with '{value}'")
+        
+        # CRITICAL SAFETY CHECK: Verify the message makes sense
+        if '{{first_name}}' in formatted_message:
+            logger.error(f"CRITICAL ERROR: {{first_name}} placeholder still in message after formatting!")
+            logger.error(f"Lead ID: {lead.id}, Lead Name: {lead.first_name} {lead.last_name}")
+            logger.error(f"Original message: {message}")
+            logger.error(f"Formatted message: {formatted_message}")
+            # Return a safe fallback message
+            return f"Hi there, {message.replace('{{first_name}}', 'there')}"
         
         # Handle case where no first name is available
         if '{{first_name}}' in formatted_message and not lead.first_name:

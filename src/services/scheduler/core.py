@@ -223,6 +223,19 @@ class OutreachScheduler:
                 
                 for lead in leads:
                     try:
+                        # CRITICAL FIX: Validate lead before processing
+                        if not lead or not hasattr(lead, 'id'):
+                            logger.error("Invalid lead object in scheduler - skipping")
+                            continue
+                        
+                        # Refresh lead data to ensure we have the correct information
+                        try:
+                            db.session.refresh(lead)
+                            logger.info(f"Processing lead: {lead.first_name} {lead.last_name} (ID: {lead.id})")
+                        except Exception as refresh_error:
+                            logger.error(f"Failed to refresh lead {lead.id}: {str(refresh_error)}")
+                            continue
+                        
                         if self._is_lead_ready_for_processing(lead):
                             self._process_single_lead(lead)
                     except Exception as e:

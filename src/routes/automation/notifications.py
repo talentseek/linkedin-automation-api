@@ -120,8 +120,10 @@ def test_weekly_stats_simple():
         # Initialize weekly statistics service
         weekly_stats_service = WeeklyStatisticsService()
         
-        # Generate statistics
-        stats = weekly_stats_service.generate_client_statistics(client_id)
+        # Generate statistics (last 7 days)
+        end_date = datetime.utcnow()
+        start_date = end_date - timedelta(days=7)
+        stats = weekly_stats_service.generate_client_statistics(client_id, start_date, end_date)
         
         if not stats:
             return jsonify({

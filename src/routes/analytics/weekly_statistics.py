@@ -39,8 +39,10 @@ def generate_weekly_statistics():
         results = []
         for client in clients:
             try:
-                # Generate statistics for this client
-                stats = weekly_stats_service.generate_client_statistics(client.id)
+                # Generate statistics for this client (last 7 days)
+                end_date = datetime.utcnow()
+                start_date = end_date - timedelta(days=7)
+                stats = weekly_stats_service.generate_client_statistics(client.id, start_date, end_date)
                 
                 if stats:
                     results.append({
@@ -112,8 +114,10 @@ def preview_weekly_statistics(client_id):
         # Initialize weekly statistics service
         weekly_stats_service = WeeklyStatisticsService()
         
-        # Generate statistics for preview
-        stats = weekly_stats_service.generate_client_statistics(client_id)
+        # Generate statistics for preview (last 7 days)
+        end_date = datetime.utcnow()
+        start_date = end_date - timedelta(days=7)
+        stats = weekly_stats_service.generate_client_statistics(client_id, start_date, end_date)
         
         if not stats:
             return jsonify({
@@ -175,8 +179,10 @@ def test_weekly_statistics():
         # Initialize weekly statistics service
         weekly_stats_service = WeeklyStatisticsService()
         
-        # Generate statistics
-        stats = weekly_stats_service.generate_client_statistics(client_id)
+        # Generate statistics (last 7 days)
+        end_date = datetime.utcnow()
+        start_date = end_date - timedelta(days=7)
+        stats = weekly_stats_service.generate_client_statistics(client_id, start_date, end_date)
         
         if not stats:
             return jsonify({

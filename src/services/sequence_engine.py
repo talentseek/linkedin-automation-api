@@ -325,6 +325,12 @@ class SequenceEngine:
             action_type = step.get('action_type')
             message = step.get('message', '')
             
+            logger.info(f"=== EXECUTE STEP DEBUG ===")
+            logger.info(f"Action type: {action_type}")
+            logger.info(f"Original message: '{message}'")
+            logger.info(f"Step data: {step}")
+            logger.info(f"=== END EXECUTE STEP DEBUG ===")
+            
             # Format message with lead data
             formatted_message = self._format_message(message, lead)
             

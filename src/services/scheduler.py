@@ -186,18 +186,19 @@ class OutreachScheduler:
                 
             logger.info("Starting periodic connection detection check")
             
-            from src.models.linkedin_account import LinkedInAccount
-            from src.services.unipile_client import UnipileClient
-            
-            # Get all connected LinkedIn accounts
-            accounts = LinkedInAccount.query.filter_by(status='connected').all()
-            
-            for account in accounts:
-                try:
-                    self._check_account_relations(account)
-                except Exception as e:
-                    logger.error(f"Error checking relations for account {account.account_id}: {str(e)}")
-                    continue
+            with self.app.app_context():
+                from src.models.linkedin_account import LinkedInAccount
+                from src.services.unipile_client import UnipileClient
+                
+                # Get all connected LinkedIn accounts
+                accounts = LinkedInAccount.query.filter_by(status='connected').all()
+                
+                for account in accounts:
+                    try:
+                        self._check_account_relations(account)
+                    except Exception as e:
+                        logger.error(f"Error checking relations for account {account.account_id}: {str(e)}")
+                        continue
                     
         except Exception as e:
             logger.error(f"Error in periodic connection detection: {str(e)}")
@@ -232,7 +233,7 @@ class OutreachScheduler:
                         
         except Exception as e:
             logger.error(f"Error checking relations for account {linkedin_account.account_id}: {str(e)}")
-            db.session.rollback()
+            # Note: db.session.rollback() removed as it's not needed without app context
     
     def _check_single_account_relations(self, account_id, unipile):
         """Check relations for a single account ID."""

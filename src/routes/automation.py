@@ -482,6 +482,63 @@ def test_format_message():
         return jsonify({'error': str(e)}), 500
 
 
+@automation_bp.route('/test/execute-step', methods=['POST'])
+# @jwt_required()  # Temporarily removed for development
+def test_execute_step():
+    """Test executing a step with personalization."""
+    try:
+        data = request.get_json()
+        lead_id = data.get('lead_id')
+        step_data = data.get('step', {
+            'action_type': 'message',
+            'message': 'Hi {{first_name}}, welcome to {{company}}!',
+            'step_order': 1
+        })
+        
+        if not lead_id:
+            return jsonify({'error': 'lead_id is required'}), 400
+        
+        from src.models import Lead, LinkedInAccount
+        from src.services.sequence_engine import SequenceEngine
+        
+        lead = Lead.query.get(lead_id)
+        if not lead:
+            return jsonify({'error': 'Lead not found'}), 404
+        
+        # Get the LinkedIn account for this lead's campaign
+        linkedin_account = LinkedInAccount.query.filter_by(
+            client_id=lead.campaign.client_id,
+            status='connected'
+        ).first()
+        
+        if not linkedin_account:
+            return jsonify({'error': 'No connected LinkedIn account found for this campaign'}), 404
+        
+        sequence_engine = SequenceEngine()
+        
+        # Test the execute_step method
+        result = sequence_engine.execute_step(lead, step_data, linkedin_account)
+        
+        return jsonify({
+            'step_data': step_data,
+            'lead_data': {
+                'id': lead.id,
+                'first_name': lead.first_name,
+                'last_name': lead.last_name,
+                'company_name': lead.company_name
+            },
+            'linkedin_account': {
+                'id': linkedin_account.id,
+                'account_id': linkedin_account.account_id
+            },
+            'result': result
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error testing step execution: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
 @automation_bp.route('/notifications/settings', methods=['GET'])
 # @jwt_required()  # Temporarily removed for development
 def get_notification_settings():

@@ -1,0 +1,199 @@
+"""
+Debug and testing endpoints.
+
+This module contains endpoints for:
+- Debug webhook functionality
+- Test webhook processing
+- Connection checking
+- Debug utilities
+"""
+
+import logging
+from flask import request, jsonify
+from src.models import db, Lead, LinkedInAccount, Event
+from src.services.unipile_client import UnipileClient
+from src.routes.webhook import webhook_bp
+from datetime import datetime
+
+logger = logging.getLogger(__name__)
+
+
+@webhook_bp.route('/check-connections', methods=['POST'])
+def check_connections():
+    """Debug endpoint to check connections for a LinkedIn account."""
+    try:
+        data = request.get_json()
+        
+        if not data or 'account_id' not in data:
+            return jsonify({'error': 'Account ID is required'}), 400
+        
+        account_id = data['account_id']
+        
+        # Use Unipile API to check connections
+        unipile = UnipileClient()
+        connections = unipile.get_first_level_connections(account_id=account_id)
+        
+        return jsonify({
+            'account_id': account_id,
+            'connections_count': len(connections),
+            'connections': connections
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error checking connections: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@webhook_bp.route('/debug-relations', methods=['POST'])
+def debug_relations():
+    """Debug endpoint to check relations for a LinkedIn account."""
+    try:
+        data = request.get_json()
+        
+        if not data or 'account_id' not in data:
+            return jsonify({'error': 'Account ID is required'}), 400
+        
+        account_id = data['account_id']
+        
+        # Use Unipile API to check relations
+        unipile = UnipileClient()
+        relations = unipile.get_relations(account_id=account_id)
+        
+        return jsonify({
+            'account_id': account_id,
+            'relations_count': len(relations),
+            'relations': relations
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error debugging relations: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@webhook_bp.route('/debug-sent-invitations', methods=['POST'])
+def debug_sent_invitations():
+    """Debug endpoint to check sent invitations for a LinkedIn account."""
+    try:
+        data = request.get_json()
+        
+        if not data or 'account_id' not in data:
+            return jsonify({'error': 'Account ID is required'}), 400
+        
+        account_id = data['account_id']
+        
+        # Use Unipile API to check sent invitations
+        unipile = UnipileClient()
+        invitations = unipile.get_sent_invitations(account_id=account_id)
+        
+        return jsonify({
+            'account_id': account_id,
+            'invitations_count': len(invitations),
+            'invitations': invitations
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error debugging sent invitations: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@webhook_bp.route('/unipile/test', methods=['POST'])
+def test_unipile_webhook():
+    """Test endpoint for Unipile webhook processing."""
+    try:
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({'error': 'Test data is required'}), 400
+        
+        # Simulate webhook processing
+        logger.info("Testing webhook processing with data:")
+        logger.info(f"Test data: {data}")
+        
+        # Process the test data as if it were a real webhook
+        event_type = data.get('type') or data.get('event')
+        
+        if event_type == 'new_relation':
+            result = handle_new_relation_webhook(data)
+        elif event_type == 'message_received':
+            result = handle_message_received_webhook(data)
+        else:
+            result = jsonify({'message': 'Test event processed', 'event_type': event_type}), 200
+        
+        return result
+        
+    except Exception as e:
+        logger.error(f"Error testing webhook: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@webhook_bp.route('/unipile/test-connection', methods=['POST'])
+def test_connection_webhook():
+    """Test endpoint for connection webhook processing."""
+    try:
+        # Create test connection data
+        test_data = {
+            'type': 'new_relation',
+            'account_id': 'test_account_123',
+            'user_provider_id': 'test_user_456',
+            'user_full_name': 'Test User',
+            'user_public_identifier': 'test-user-123',
+            'user_profile_url': 'https://linkedin.com/in/test-user-123'
+        }
+        
+        logger.info("Testing connection webhook with data:")
+        logger.info(f"Test data: {test_data}")
+        
+        # Process the test connection
+        result = handle_new_relation_webhook(test_data)
+        
+        return jsonify({
+            'message': 'Connection test completed',
+            'test_data': test_data,
+            'result': 'success'
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error testing connection webhook: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@webhook_bp.route('/unipile/test-message-edited', methods=['POST'])
+def test_message_edited_webhook():
+    """Test endpoint for message edited webhook processing."""
+    try:
+        # Create test message data
+        test_data = {
+            'type': 'message_received',
+            'account_id': 'test_account_123',
+            'account_info': {
+                'type': 'LINKEDIN',
+                'feature': 'classic'
+            },
+            'sender': {
+                'attendee_provider_id': 'test_user_456',
+                'attendee_name': 'Test User'
+            },
+            'message': 'This is a test message',
+            'chat_id': 'test_chat_789',
+            'message_id': 'test_message_101'
+        }
+        
+        logger.info("Testing message webhook with data:")
+        logger.info(f"Test data: {test_data}")
+        
+        # Process the test message
+        result = handle_message_received_webhook(test_data)
+        
+        return jsonify({
+            'message': 'Message test completed',
+            'test_data': test_data,
+            'result': 'success'
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error testing message webhook: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+# Import the handler functions for testing
+from .handlers import handle_new_relation_webhook, handle_message_received_webhook

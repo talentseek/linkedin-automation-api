@@ -110,7 +110,7 @@ class OutreachScheduler:
     
     def _is_lead_ready_for_processing(self, lead: Lead) -> bool:
         """Check if a lead is ready for processing."""
-        return _is_lead_ready_for_processing(lead)
+        return _is_lead_ready_for_processing(self, lead)
     
     def _process_single_lead(self, lead: Lead):
         """Process a single lead."""

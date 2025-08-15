@@ -12,8 +12,8 @@ class NotificationService:
     
     def __init__(self):
         self.resend_api_key = os.environ.get('RESEND_API_KEY')
-        # Use default Resend domain until custom domain is verified
-        self.from_email = os.environ.get('NOTIFY_EMAIL_FROM', 'onboarding@resend.dev')
+        # Use the correct custom domain
+        self.from_email = os.environ.get('NOTIFY_EMAIL_FROM', 'notifications@notifications.costperdemo.com')
         self.to_emails = os.environ.get('NOTIFY_EMAIL_TO', '').split(',')
         self.enabled = os.environ.get('NOTIFICATIONS_ENABLED', 'false').lower() == 'true'
         

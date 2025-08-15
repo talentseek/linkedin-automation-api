@@ -50,7 +50,7 @@ def register_webhook():
         
         # Use Unipile API to register webhook
         unipile = UnipileClient()
-        webhook = unipile.register_webhook(url=url, events=events)
+        webhook = unipile.create_webhook(request_url=url, events=events)
         
         return jsonify({
             'message': 'Webhook registered successfully',
@@ -96,8 +96,8 @@ def configure_unified_webhook():
         
         # Delete existing webhooks
         existing_webhooks = unipile.list_webhooks()
-        for webhook in existing_webhooks:
-            if webhook.get('url') == webhook_url:
+        for webhook in existing_webhooks.get('webhooks', {}).get('items', []):
+            if webhook.get('request_url') == webhook_url:
                 unipile.delete_webhook(webhook.get('id'))
         
         # Register new unified webhook

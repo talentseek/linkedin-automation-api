@@ -56,7 +56,7 @@ def _send_connection_request(self, lead: Lead, linkedin_account, message: str) -
         try:
             result = unipile.send_connection_request(
                 account_id=linkedin_account.account_id,
-                public_identifier=lead.public_identifier,
+                profile_id=lead.public_identifier,
                 message=message
             )
             

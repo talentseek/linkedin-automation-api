@@ -22,22 +22,22 @@ def _get_today_usage_counts(self, provider_account_id: str):
         
         # Get today's usage record
         usage = RateUsage.query.filter_by(
-            provider_account_id=provider_account_id,
-            date=today
+            linkedin_account_id=provider_account_id,
+            usage_date=today
         ).first()
         
         if not usage:
             # Create new usage record for today
             usage = RateUsage(
-                provider_account_id=provider_account_id,
-                date=today,
-                connections_sent=0,
+                linkedin_account_id=provider_account_id,
+                usage_date=today,
+                invites_sent=0,
                 messages_sent=0
             )
             db.session.add(usage)
             db.session.commit()
         
-        return usage.connections_sent, usage.messages_sent
+        return usage.invites_sent, usage.messages_sent
         
     except Exception as e:
         logger.error(f"Error getting usage counts: {str(e)}")
@@ -79,22 +79,22 @@ def _increment_usage(self, provider_account_id: str, action_type: str):
         
         # Get or create today's usage record
         usage = RateUsage.query.filter_by(
-            provider_account_id=provider_account_id,
-            date=today
+            linkedin_account_id=provider_account_id,
+            usage_date=today
         ).first()
         
         if not usage:
             usage = RateUsage(
-                provider_account_id=provider_account_id,
-                date=today,
-                connections_sent=0,
+                linkedin_account_id=provider_account_id,
+                usage_date=today,
+                invites_sent=0,
                 messages_sent=0
             )
             db.session.add(usage)
         
         # Increment the appropriate counter
         if action_type == 'connection':
-            usage.connections_sent += 1
+            usage.invites_sent += 1
         elif action_type == 'message':
             usage.messages_sent += 1
         

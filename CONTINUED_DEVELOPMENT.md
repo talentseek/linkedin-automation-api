@@ -607,8 +607,20 @@ Auth: JWT; all endpoints scoped by `client_id` (multi-tenant).
 
 #### **📋 P2 - MEDIUM PRIORITY (PHASE 3-4)**
 
-**11. Code Organization & Refactoring**
-- [ ] Break large files into modules
+**11. Code Organization & Refactoring** 📋 **IN PROGRESS**
+**Status**: Started with lead.py refactoring - COMPLETED ✅
+- [x] **Lead Routes Refactoring**: Broke down 83KB, 2007-line monolithic `lead.py` into modular structure
+  - [x] `src/routes/lead/crud.py` - Basic CRUD operations (5 endpoints)
+  - [x] `src/routes/lead/import_search.py` - Lead import and search functionality (4 endpoints)
+  - [x] `src/routes/lead/search_params.py` - Search parameters and helpers (2 endpoints)
+  - [x] `src/routes/lead/management.py` - Lead management operations (4 endpoints)
+  - [x] `src/routes/lead/first_level.py` - First level connections handling (2 endpoints)
+  - [x] `src/routes/lead/__init__.py` - Package initialization and blueprint registration
+- [ ] **Webhook Routes Refactoring**: Break down 72KB, 1581-line `webhook.py`
+- [ ] **Scheduler Service Refactoring**: Break down 49KB, 996-line `scheduler.py`
+- [ ] **Sequence Engine Refactoring**: Break down 33KB, 741-line `sequence_engine.py`
+- [ ] **Analytics Routes Refactoring**: Break down 56KB, 1322-line `analytics.py`
+- [ ] **Automation Routes Refactoring**: Break down 25KB, 663-line `automation.py`
 - [ ] Implement service layer architecture
 - [ ] Add comprehensive error handling
 - [ ] Improve code documentation

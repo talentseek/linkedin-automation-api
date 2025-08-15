@@ -1,6 +1,7 @@
 import logging
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Any
+import calendar
 
 from src.extensions import db
 from src.models import Lead, Campaign, Event
@@ -8,7 +9,7 @@ from src.services.unipile_client import UnipileClient
 
 logger = logging.getLogger(__name__)
 
-# Example sequence definition with short messages
+# Example sequence definition with both delay formats
 EXAMPLE_SEQUENCE = [
     {
         "step_order": 1,
@@ -21,14 +22,23 @@ EXAMPLE_SEQUENCE = [
         "step_order": 2,
         "action_type": "message",
         "message": "Hi {{first_name}}, thanks for connecting! I'd love to learn more about {{company_name}}. Any chance you'd be open to a quick chat?",
-        "delay_hours": 24,
-        "name": "Follow-up Message"
+        "delay_hours": 0,  # No delay - immediate after connection acceptance
+        "name": "First Message (Immediate)"
     },
     {
         "step_order": 3,
         "action_type": "message",
         "message": "Hi {{first_name}}, just following up on my previous message. Would you be interested in a 15-minute call to explore potential collaboration?",
-        "delay_hours": 72,
+        "delay_hours": 0,
+        "delay_working_days": 3,  # 3 working days after first message
+        "name": "Follow-up Message"
+    },
+    {
+        "step_order": 4,
+        "action_type": "message",
+        "message": "Hi {{first_name}}, final follow-up here. If you're interested in exploring automation solutions, I'd be happy to share some case studies. No pressure!",
+        "delay_hours": 0,
+        "delay_working_days": 5,  # 5 working days after previous message
         "name": "Final Follow-up"
     }
 ]
@@ -45,6 +55,109 @@ class SequenceEngine:
         if self.unipile is None:
             self.unipile = UnipileClient()
         return self.unipile
+    
+    def _is_weekend(self, date: datetime) -> bool:
+        """Check if a date falls on a weekend."""
+        return date.weekday() >= 5  # Saturday = 5, Sunday = 6
+    
+    def _add_working_days(self, start_date: datetime, working_days: int) -> datetime:
+        """Add working days to a date, skipping weekends."""
+        if working_days <= 0:
+            return start_date
+        
+        current_date = start_date
+        days_added = 0
+        
+        while days_added < working_days:
+            current_date += timedelta(days=1)
+            if not self._is_weekend(current_date):
+                days_added += 1
+        
+        return current_date
+    
+    def _calculate_delay(self, step: Dict[str, Any]) -> timedelta:
+        """Calculate the total delay for a step, supporting both hours and working days."""
+        delay_hours = step.get('delay_hours', 0)
+        delay_working_days = step.get('delay_working_days', 0)
+        
+        # Start with the base hours
+        total_delay = timedelta(hours=delay_hours)
+        
+        # Add working days if specified
+        if delay_working_days > 0:
+            # Calculate working days from now
+            working_day_target = self._add_working_days(datetime.utcnow(), delay_working_days)
+            # Calculate the difference
+            working_day_delay = working_day_target - datetime.utcnow()
+            total_delay += working_day_delay
+        
+        return total_delay
+    
+    def _get_minimum_delay(self, step: Dict[str, Any]) -> timedelta:
+        """Get the minimum delay required for a step (backward compatible)."""
+        # If delay_working_days is specified, use the new calculation
+        if 'delay_working_days' in step:
+            return self._calculate_delay(step)
+        
+        # Otherwise, use the old delay_hours logic for backward compatibility
+        delay_hours = step.get('delay_hours', 24)
+        return timedelta(hours=delay_hours)
+    
+    def validate_sequence_definition(self, sequence: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """Validate a sequence definition."""
+        errors = []
+        
+        if not sequence:
+            errors.append("Sequence cannot be empty")
+            return {'valid': False, 'errors': errors}
+        
+        step_orders = []
+        
+        for i, step in enumerate(sequence):
+            # Check required fields
+            if 'step_order' not in step:
+                errors.append(f"Step {i+1}: Missing step_order")
+            else:
+                step_orders.append(step['step_order'])
+            
+            if 'action_type' not in step:
+                errors.append(f"Step {i+1}: Missing action_type")
+            elif step['action_type'] not in ['connection_request', 'message']:
+                errors.append(f"Step {i+1}: Invalid action_type '{step['action_type']}'")
+            
+            if 'message' not in step:
+                errors.append(f"Step {i+1}: Missing message")
+            
+            if 'name' not in step:
+                errors.append(f"Step {i+1}: Missing name")
+            
+            # Validate delays
+            delay_hours = step.get('delay_hours', 0)
+            delay_working_days = step.get('delay_working_days', 0)
+            
+            if delay_hours < 0:
+                errors.append(f"Step {i+1}: delay_hours cannot be negative")
+            
+            if delay_working_days < 0:
+                errors.append(f"Step {i+1}: delay_working_days cannot be negative")
+            
+            if delay_hours == 0 and delay_working_days == 0 and i > 0:
+                # Allow immediate execution for first step, but warn for others
+                logger.warning(f"Step {i+1}: No delay specified, will execute immediately")
+        
+        # Check for duplicate step orders
+        if len(step_orders) != len(set(step_orders)):
+            errors.append("Duplicate step_order values found")
+        
+        # Check for sequential step orders
+        sorted_orders = sorted(step_orders)
+        if sorted_orders != list(range(1, len(sorted_orders) + 1)):
+            errors.append("Step orders must be sequential starting from 1")
+        
+        return {
+            'valid': len(errors) == 0,
+            'errors': errors
+        }
     
     def validate_and_truncate_message(self, message: str, max_length: int = 300) -> str:
         """Validate and truncate message to fit LinkedIn's character limit."""
@@ -105,8 +218,7 @@ class SequenceEngine:
 
             # Check if enough time has passed since the last step
             if lead.last_step_sent_at:
-                delay_hours = step.get('delay_hours', 24)
-                min_delay = timedelta(hours=delay_hours)
+                min_delay = self._get_minimum_delay(step)
                 time_since_last = datetime.utcnow() - lead.last_step_sent_at
                 
                 if time_since_last < min_delay:
@@ -506,4 +618,40 @@ class SequenceEngine:
     def validate_sequence_definition(self, sequence: List[Dict[str, Any]]) -> Dict[str, Any]:
         """Validate a sequence definition (alias for validate_sequence)."""
         return self.validate_sequence(sequence)
+
+    def get_next_execution_time(self, lead: Lead, step: Dict[str, Any]) -> Optional[datetime]:
+        """Get the next execution time for a step based on the lead's last step sent time."""
+        try:
+            if not lead.last_step_sent_at:
+                return datetime.utcnow()
+            
+            min_delay = self._get_minimum_delay(step)
+            return lead.last_step_sent_at + min_delay
+            
+        except Exception as e:
+            logger.error(f"Error calculating next execution time for lead {lead.id}: {str(e)}")
+            return None
+    
+    def get_delay_description(self, step: Dict[str, Any]) -> str:
+        """Get a human-readable description of the delay for a step."""
+        delay_hours = step.get('delay_hours', 0)
+        delay_working_days = step.get('delay_working_days', 0)
+        
+        if delay_hours == 0 and delay_working_days == 0:
+            return "Immediate"
+        
+        parts = []
+        if delay_working_days > 0:
+            if delay_working_days == 1:
+                parts.append("1 working day")
+            else:
+                parts.append(f"{delay_working_days} working days")
+        
+        if delay_hours > 0:
+            if delay_hours == 1:
+                parts.append("1 hour")
+            else:
+                parts.append(f"{delay_hours} hours")
+        
+        return " + ".join(parts)
 

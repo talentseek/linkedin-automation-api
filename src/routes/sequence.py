@@ -3,6 +3,7 @@ from flask_jwt_extended import jwt_required, get_jwt_identity
 from src.models import db, Campaign, Lead, LinkedInAccount
 from src.services.sequence_engine import SequenceEngine, EXAMPLE_SEQUENCE
 import logging
+from datetime import datetime
 
 sequence_bp = Blueprint('sequence', __name__)
 logger = logging.getLogger(__name__)
@@ -237,5 +238,47 @@ def validate_sequence():
         
     except Exception as e:
         logger.error(f"Error validating sequence: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@sequence_bp.route('/sequence/test-delays', methods=['POST'])
+# @jwt_required()  # Temporarily removed for development
+def test_sequence_delays():
+    """Test sequence delay calculations with working days."""
+    try:
+        from src.services.sequence_engine import SequenceEngine
+        
+        data = request.get_json()
+        sequence = data.get('sequence', EXAMPLE_SEQUENCE)
+        
+        sequence_engine = SequenceEngine()
+        
+        # Test delay calculations for each step
+        delay_tests = []
+        for step in sequence:
+            delay_description = sequence_engine.get_delay_description(step)
+            min_delay = sequence_engine._get_minimum_delay(step)
+            
+            delay_tests.append({
+                'step_order': step.get('step_order'),
+                'name': step.get('name'),
+                'delay_hours': step.get('delay_hours', 0),
+                'delay_working_days': step.get('delay_working_days', 0),
+                'delay_description': delay_description,
+                'total_delay_hours': min_delay.total_seconds() / 3600,
+                'total_delay_days': min_delay.total_seconds() / 86400
+            })
+        
+        return jsonify({
+            'message': 'Sequence delay test completed',
+            'delay_tests': delay_tests,
+            'working_day_example': {
+                'description': '3 working days from now',
+                'target_date': sequence_engine._add_working_days(datetime.utcnow(), 3).isoformat()
+            }
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error testing sequence delays: {str(e)}")
         return jsonify({'error': str(e)}), 500
 

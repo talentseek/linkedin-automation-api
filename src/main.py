@@ -39,10 +39,10 @@ def create_app(config_name=None):
     from src.routes.client import client_bp
     from src.routes.campaign import campaign_bp
     from src.routes.lead import lead_bp  # Now uses modular structure
-    from src.routes.automation import automation_bp
+    from src.routes.automation import automation_bp  # Now uses modular structure
     from src.routes.webhook import webhook_bp  # Now uses modular structure
     from src.routes.sequence import sequence_bp
-    from src.routes.analytics import analytics_bp
+    from src.routes.analytics import analytics_bp  # Now uses modular structure
     from src.routes.linkedin_account import linkedin_account_bp
     from src.routes.unipile_auth import unipile_auth_bp
     from src.routes.user import user_bp

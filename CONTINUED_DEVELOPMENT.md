@@ -606,7 +606,7 @@ Auth: JWT; all endpoints scoped by `client_id` (multi-tenant).
 - ✅ Resend notifications working for replies
 - ✅ Weekly client statistics emails automated
 - 🔄 All test endpoints removed
-- 🔄 Custom delays and timezones supported
+- ✅ Custom delays and timezones supported
 - 🔄 Analytics are comprehensive and polished
 - 🔄 Code is well-organized and documented
 - 🔄 OpenAPI documentation is complete
@@ -698,14 +698,14 @@ Auth: JWT; all endpoints scoped by `client_id` (multi-tenant).
 - [x] Add email delivery tracking
 - [x] Test statistics generation and delivery
 
-**9. Custom Sequence Delays** 📋 **PLANNED**
-- [ ] Add configurable delays per step in sequence
-- [ ] Implement working day calculation (exclude weekends)
-- [ ] Add delay validation and constraints
-- [ ] Update sequence engine to use custom delays
-- [ ] Add delay configuration UI/API
-- [ ] Test custom delays with different scenarios
-- [ ] Add delay override capabilities
+**9. Custom Sequence Delays** ✅ **COMPLETED**
+- [x] Add configurable delays per step in sequence
+- [x] Implement working day calculation (exclude weekends)
+- [x] Add delay validation and constraints
+- [x] Update sequence engine to use custom delays
+- [x] Add delay configuration UI/API
+- [x] Test custom delays with different scenarios
+- [x] Add delay override capabilities
 
 **10. Timezone Support** 📋 **PLANNED**
 - [ ] Add timezone field to Campaign model

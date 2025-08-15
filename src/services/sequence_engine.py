@@ -2,6 +2,7 @@ import logging
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Any
 import calendar
+import pytz
 
 from src.extensions import db
 from src.models import Lead, Campaign, Event
@@ -56,12 +57,89 @@ class SequenceEngine:
             self.unipile = UnipileClient()
         return self.unipile
     
-    def _is_weekend(self, date: datetime) -> bool:
-        """Check if a date falls on a weekend."""
-        return date.weekday() >= 5  # Saturday = 5, Sunday = 6
+    def _get_campaign_timezone(self, campaign: Campaign) -> pytz.timezone:
+        """Get the timezone for a campaign."""
+        try:
+            return pytz.timezone(campaign.timezone)
+        except pytz.exceptions.UnknownTimeZoneError:
+            logger.warning(f"Unknown timezone '{campaign.timezone}' for campaign {campaign.id}, using UTC")
+            return pytz.UTC
+    
+    def _get_campaign_local_time(self, campaign: Campaign) -> datetime:
+        """Get the current local time for a campaign's timezone."""
+        tz = self._get_campaign_timezone(campaign)
+        utc_now = datetime.utcnow().replace(tzinfo=pytz.UTC)
+        return utc_now.astimezone(tz)
+    
+    def _is_weekend_in_timezone(self, campaign: Campaign, date: datetime = None) -> bool:
+        """Check if a date falls on a weekend in the campaign's timezone."""
+        if date is None:
+            local_time = self._get_campaign_local_time(campaign)
+        else:
+            # Convert UTC date to campaign timezone
+            tz = self._get_campaign_timezone(campaign)
+            if date.tzinfo is None:
+                date = date.replace(tzinfo=pytz.UTC)
+            local_time = date.astimezone(tz)
+        
+        return local_time.weekday() >= 5  # Saturday = 5, Sunday = 6
+    
+    def _add_working_days_in_timezone(self, campaign: Campaign, start_date: datetime, working_days: int) -> datetime:
+        """Add working days to a date in the campaign's timezone, skipping weekends."""
+        if working_days <= 0:
+            return start_date
+        
+        tz = self._get_campaign_timezone(campaign)
+        
+        # Convert start_date to campaign timezone
+        if start_date.tzinfo is None:
+            start_date = start_date.replace(tzinfo=pytz.UTC)
+        current_date = start_date.astimezone(tz)
+        days_added = 0
+        
+        while days_added < working_days:
+            current_date += timedelta(days=1)
+            if current_date.weekday() < 5:  # Monday = 0, Friday = 4
+                days_added += 1
+        
+        # Convert back to UTC
+        return current_date.astimezone(pytz.UTC).replace(tzinfo=None)
+    
+    def _calculate_delay(self, step: Dict[str, Any], campaign: Campaign = None) -> timedelta:
+        """Calculate the total delay for a step, supporting both hours and working days with timezone awareness."""
+        delay_hours = step.get('delay_hours', 0)
+        delay_working_days = step.get('delay_working_days', 0)
+        
+        # Start with the base hours
+        total_delay = timedelta(hours=delay_hours)
+        
+        # Add working days if specified
+        if delay_working_days > 0 and campaign:
+            # Calculate working days from now in campaign timezone
+            working_day_target = self._add_working_days_in_timezone(campaign, datetime.utcnow(), delay_working_days)
+            # Calculate the difference
+            working_day_delay = working_day_target - datetime.utcnow()
+            total_delay += working_day_delay
+        elif delay_working_days > 0:
+            # Fallback to UTC if no campaign provided
+            working_day_target = self._add_working_days(datetime.utcnow(), delay_working_days)
+            working_day_delay = working_day_target - datetime.utcnow()
+            total_delay += working_day_delay
+        
+        return total_delay
+    
+    def _get_minimum_delay(self, step: Dict[str, Any], campaign: Campaign = None) -> timedelta:
+        """Get the minimum delay required for a step (backward compatible with timezone support)."""
+        # If delay_working_days is specified, use the new calculation
+        if 'delay_working_days' in step:
+            return self._calculate_delay(step, campaign)
+        
+        # Otherwise, use the old delay_hours logic for backward compatibility
+        delay_hours = step.get('delay_hours', 24)
+        return timedelta(hours=delay_hours)
     
     def _add_working_days(self, start_date: datetime, working_days: int) -> datetime:
-        """Add working days to a date, skipping weekends."""
+        """Add working days to a date, skipping weekends (UTC fallback)."""
         if working_days <= 0:
             return start_date
         
@@ -70,38 +148,10 @@ class SequenceEngine:
         
         while days_added < working_days:
             current_date += timedelta(days=1)
-            if not self._is_weekend(current_date):
+            if current_date.weekday() < 5:  # Monday = 0, Friday = 4
                 days_added += 1
         
         return current_date
-    
-    def _calculate_delay(self, step: Dict[str, Any]) -> timedelta:
-        """Calculate the total delay for a step, supporting both hours and working days."""
-        delay_hours = step.get('delay_hours', 0)
-        delay_working_days = step.get('delay_working_days', 0)
-        
-        # Start with the base hours
-        total_delay = timedelta(hours=delay_hours)
-        
-        # Add working days if specified
-        if delay_working_days > 0:
-            # Calculate working days from now
-            working_day_target = self._add_working_days(datetime.utcnow(), delay_working_days)
-            # Calculate the difference
-            working_day_delay = working_day_target - datetime.utcnow()
-            total_delay += working_day_delay
-        
-        return total_delay
-    
-    def _get_minimum_delay(self, step: Dict[str, Any]) -> timedelta:
-        """Get the minimum delay required for a step (backward compatible)."""
-        # If delay_working_days is specified, use the new calculation
-        if 'delay_working_days' in step:
-            return self._calculate_delay(step)
-        
-        # Otherwise, use the old delay_hours logic for backward compatibility
-        delay_hours = step.get('delay_hours', 24)
-        return timedelta(hours=delay_hours)
     
     def validate_sequence_definition(self, sequence: List[Dict[str, Any]]) -> Dict[str, Any]:
         """Validate a sequence definition."""
@@ -218,7 +268,7 @@ class SequenceEngine:
 
             # Check if enough time has passed since the last step
             if lead.last_step_sent_at:
-                min_delay = self._get_minimum_delay(step)
+                min_delay = self._get_minimum_delay(step, lead.campaign)
                 time_since_last = datetime.utcnow() - lead.last_step_sent_at
                 
                 if time_since_last < min_delay:
@@ -654,4 +704,31 @@ class SequenceEngine:
                 parts.append(f"{delay_hours} hours")
         
         return " + ".join(parts)
+
+    def get_campaign_timezone_info(self, campaign: Campaign) -> Dict[str, Any]:
+        """Get timezone information for a campaign."""
+        try:
+            tz = self._get_campaign_timezone(campaign)
+            local_time = self._get_campaign_local_time(campaign)
+            is_weekend = self._is_weekend_in_timezone(campaign)
+            
+            return {
+                'timezone': campaign.timezone,
+                'local_time': local_time.isoformat(),
+                'local_time_formatted': local_time.strftime('%Y-%m-%d %H:%M:%S %Z'),
+                'is_weekend': is_weekend,
+                'day_of_week': local_time.strftime('%A'),
+                'utc_offset': local_time.strftime('%z')
+            }
+        except Exception as e:
+            logger.error(f"Error getting timezone info for campaign {campaign.id}: {str(e)}")
+            return {
+                'timezone': 'UTC',
+                'local_time': datetime.utcnow().isoformat(),
+                'local_time_formatted': datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC'),
+                'is_weekend': False,
+                'day_of_week': datetime.utcnow().strftime('%A'),
+                'utc_offset': '+0000',
+                'error': str(e)
+            }
 

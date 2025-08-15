@@ -282,3 +282,122 @@ def test_sequence_delays():
         logger.error(f"Error testing sequence delays: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
+
+@sequence_bp.route('/campaigns/<campaign_id>/timezone', methods=['GET'])
+# @jwt_required()  # Temporarily removed for development
+def get_campaign_timezone_info(campaign_id):
+    """Get timezone information for a campaign."""
+    try:
+        campaign = Campaign.query.get(campaign_id)
+        if not campaign:
+            return jsonify({'error': 'Campaign not found'}), 404
+        
+        from src.services.sequence_engine import SequenceEngine
+        sequence_engine = SequenceEngine()
+        
+        timezone_info = sequence_engine.get_campaign_timezone_info(campaign)
+        
+        return jsonify({
+            'campaign_id': campaign_id,
+            'campaign_name': campaign.name,
+            'timezone_info': timezone_info
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error getting campaign timezone info: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@sequence_bp.route('/campaigns/<campaign_id>/timezone', methods=['PUT'])
+# @jwt_required()  # Temporarily removed for development
+def update_campaign_timezone(campaign_id):
+    """Update the timezone for a campaign."""
+    try:
+        campaign = Campaign.query.get(campaign_id)
+        if not campaign:
+            return jsonify({'error': 'Campaign not found'}), 404
+        
+        data = request.get_json()
+        new_timezone = data.get('timezone')
+        
+        if not new_timezone:
+            return jsonify({'error': 'timezone is required'}), 400
+        
+        # Validate timezone
+        try:
+            import pytz
+            pytz.timezone(new_timezone)
+        except pytz.exceptions.UnknownTimeZoneError:
+            return jsonify({'error': f'Invalid timezone: {new_timezone}'}), 400
+        
+        # Update timezone
+        campaign.timezone = new_timezone
+        db.session.commit()
+        
+        # Get updated timezone info
+        from src.services.sequence_engine import SequenceEngine
+        sequence_engine = SequenceEngine()
+        timezone_info = sequence_engine.get_campaign_timezone_info(campaign)
+        
+        return jsonify({
+            'message': 'Campaign timezone updated successfully',
+            'campaign_id': campaign_id,
+            'timezone': new_timezone,
+            'timezone_info': timezone_info
+        }), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error updating campaign timezone: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@sequence_bp.route('/timezones/available', methods=['GET'])
+# @jwt_required()  # Temporarily removed for development
+def get_available_timezones():
+    """Get a list of available timezones."""
+    try:
+        import pytz
+        
+        # Common timezones for business use
+        common_timezones = [
+            'UTC',
+            'America/New_York',
+            'America/Chicago',
+            'America/Denver',
+            'America/Los_Angeles',
+            'Europe/London',
+            'Europe/Paris',
+            'Europe/Berlin',
+            'Asia/Tokyo',
+            'Asia/Shanghai',
+            'Australia/Sydney',
+            'Pacific/Auckland'
+        ]
+        
+        timezone_list = []
+        for tz_name in common_timezones:
+            try:
+                tz = pytz.timezone(tz_name)
+                utc_now = datetime.utcnow().replace(tzinfo=pytz.UTC)
+                local_time = utc_now.astimezone(tz)
+                
+                timezone_list.append({
+                    'name': tz_name,
+                    'display_name': tz_name.replace('_', ' '),
+                    'current_time': local_time.strftime('%H:%M'),
+                    'utc_offset': local_time.strftime('%z'),
+                    'is_weekend': local_time.weekday() >= 5
+                })
+            except Exception as e:
+                logger.warning(f"Error processing timezone {tz_name}: {str(e)}")
+        
+        return jsonify({
+            'timezones': timezone_list,
+            'total': len(timezone_list)
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error getting available timezones: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+

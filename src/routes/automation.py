@@ -481,3 +481,56 @@ def test_format_message():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+
+@automation_bp.route('/notifications/settings', methods=['GET'])
+# @jwt_required()  # Temporarily removed for development
+def get_notification_settings():
+    """Get current notification settings."""
+    try:
+        from src.services.notifications import get_notification_service
+        
+        notification_service = get_notification_service()
+        
+        return jsonify({
+            'enabled': notification_service.enabled,
+            'from_email': notification_service.from_email,
+            'to_emails': notification_service.to_emails,
+            'resend_configured': bool(notification_service.resend_api_key)
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error getting notification settings: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@automation_bp.route('/notifications/test', methods=['POST'])
+# @jwt_required()  # Temporarily removed for development
+def test_notification():
+    """Send a test notification to verify configuration."""
+    try:
+        from src.services.notifications import get_notification_service
+        
+        notification_service = get_notification_service()
+        
+        if not notification_service.enabled:
+            return jsonify({'error': 'Notifications are disabled'}), 400
+        
+        # Send a test notification
+        success = notification_service.send_error_notification(
+            error_type="Test Notification",
+            error_message="This is a test notification to verify your email configuration is working correctly.",
+            context={
+                'test_time': datetime.utcnow().isoformat(),
+                'system': 'LinkedIn Automation API'
+            }
+        )
+        
+        if success:
+            return jsonify({'message': 'Test notification sent successfully'}), 200
+        else:
+            return jsonify({'error': 'Failed to send test notification'}), 500
+            
+    except Exception as e:
+        logger.error(f"Error sending test notification: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+

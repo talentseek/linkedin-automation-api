@@ -446,6 +446,29 @@ def handle_simple_webhook():
                             db.session.commit()
                             
                             logger.info(f"Simple webhook: Updated lead {lead.id} status to connected via invitation acceptance")
+                            
+                            # Send connection notification
+                            try:
+                                from src.services.notifications import get_notification_service
+                                from src.models import LinkedInAccount
+                                
+                                linkedin_account = LinkedInAccount.query.filter_by(
+                                    account_id=account_id
+                                ).first()
+                                
+                                if linkedin_account:
+                                    notification_service = get_notification_service()
+                                    notification_service.send_connection_notification(
+                                        lead=lead,
+                                        campaign=lead.campaign,
+                                        linkedin_account=linkedin_account
+                                    )
+                                    logger.info(f"Connection notification sent for lead {lead.id}")
+                                else:
+                                    logger.warning(f"No LinkedIn account found for account_id {account_id}")
+                            except Exception as e:
+                                logger.error(f"Failed to send connection notification: {str(e)}")
+                            
                             return jsonify({'status': 'connection_accepted', 'id': webhook_data.id, 'event_type': event_type, 'lead_id': lead.id}), 200
                 
                 # STEP 3B: Regular reply detection
@@ -478,6 +501,31 @@ def handle_simple_webhook():
                             db.session.commit()
                             
                             logger.info(f"Simple webhook: Updated lead {lead.id} status from {old_status} to responded")
+                            
+                            # Send notification using new notification service
+                            try:
+                                from src.services.notifications import get_notification_service
+                                from src.models import LinkedInAccount
+                                
+                                # Get the LinkedIn account for this campaign
+                                linkedin_account = LinkedInAccount.query.filter_by(
+                                    client_id=lead.campaign.client_id,
+                                    status='connected'
+                                ).first()
+                                
+                                if linkedin_account:
+                                    notification_service = get_notification_service()
+                                    notification_service.send_reply_notification(
+                                        lead=lead,
+                                        campaign=lead.campaign,
+                                        linkedin_account=linkedin_account,
+                                        message_preview=message_text
+                                    )
+                                    logger.info(f"Reply notification sent for lead {lead.id}")
+                                else:
+                                    logger.warning(f"No LinkedIn account found for campaign {lead.campaign.id}")
+                            except Exception as e:
+                                logger.error(f"Failed to send reply notification: {str(e)}")
                         else:
                             logger.info(f"Simple webhook: Lead {lead.id} already responded (status: {lead.status})")
                     else:
@@ -589,6 +637,29 @@ def handle_simple_webhook():
                             db.session.commit()
                             
                             logger.info(f"Simple webhook: Updated lead {lead.id} status to connected via message_edited")
+                            
+                            # Send connection notification
+                            try:
+                                from src.services.notifications import get_notification_service
+                                from src.models import LinkedInAccount
+                                
+                                linkedin_account = LinkedInAccount.query.filter_by(
+                                    account_id=account_id
+                                ).first()
+                                
+                                if linkedin_account:
+                                    notification_service = get_notification_service()
+                                    notification_service.send_connection_notification(
+                                        lead=lead,
+                                        campaign=lead.campaign,
+                                        linkedin_account=linkedin_account
+                                    )
+                                    logger.info(f"Connection notification sent for lead {lead.id}")
+                                else:
+                                    logger.warning(f"No LinkedIn account found for account_id {account_id}")
+                            except Exception as e:
+                                logger.error(f"Failed to send connection notification: {str(e)}")
+                            
                             return jsonify({'status': 'connection_accepted', 'id': webhook_data.id, 'event_type': event_type, 'lead_id': lead.id}), 200
                         else:
                             logger.info(f"Simple webhook: No matching lead found for message_edited connection detection")
@@ -640,6 +711,29 @@ def handle_simple_webhook():
                         db.session.commit()
                         
                         logger.info(f"Simple webhook: Updated lead {lead.id} status from {old_status} to connected via new_relation")
+                        
+                        # Send connection notification
+                        try:
+                            from src.services.notifications import get_notification_service
+                            from src.models import LinkedInAccount
+                            
+                            linkedin_account = LinkedInAccount.query.filter_by(
+                                account_id=account_id
+                            ).first()
+                            
+                            if linkedin_account:
+                                notification_service = get_notification_service()
+                                notification_service.send_connection_notification(
+                                    lead=lead,
+                                    campaign=lead.campaign,
+                                    linkedin_account=linkedin_account
+                                )
+                                logger.info(f"Connection notification sent for lead {lead.id}")
+                            else:
+                                logger.warning(f"No LinkedIn account found for account_id {account_id}")
+                        except Exception as e:
+                            logger.error(f"Failed to send connection notification: {str(e)}")
+                        
                         return jsonify({'status': 'connection_accepted', 'id': webhook_data.id, 'event_type': event_type, 'lead_id': lead.id}), 200
                     elif lead:
                         logger.info(f"Simple webhook: Lead {lead.id} already in status: {lead.status}")

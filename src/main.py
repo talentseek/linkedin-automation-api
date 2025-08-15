@@ -34,32 +34,90 @@ def create_app(config_name=None):
     db.init_app(app)
     jwt.init_app(app)
     
-    # Register blueprints
-    from src.routes.auth import auth_bp
-    from src.routes.client import client_bp
-    from src.routes.campaign import campaign_bp
-    from src.routes.lead import lead_bp  # Now uses modular structure
-    from src.routes.automation import automation_bp  # Now uses modular structure
-    from src.routes.webhook import webhook_bp  # Now uses modular structure
-    from src.routes.sequence import sequence_bp
-    from src.routes.analytics import analytics_bp  # Now uses modular structure
-    from src.routes.linkedin_account import linkedin_account_bp
-    from src.routes.unipile_auth import unipile_auth_bp
-    from src.routes.user import user_bp
-    from src.routes.admin import admin_bp
+    # Register blueprints with error handling
+    try:
+        from src.routes.auth import auth_bp
+        app.register_blueprint(auth_bp, url_prefix='/api/auth')
+        app.logger.info("Registered auth blueprint")
+    except Exception as e:
+        app.logger.error(f"Failed to register auth blueprint: {str(e)}")
     
-    app.register_blueprint(auth_bp, url_prefix='/api/auth')
-    app.register_blueprint(client_bp, url_prefix='/api/clients')
-    app.register_blueprint(campaign_bp, url_prefix='/api/campaigns')
-    app.register_blueprint(lead_bp, url_prefix='/api/leads')
-    app.register_blueprint(automation_bp, url_prefix='/api/automation')
-    app.register_blueprint(webhook_bp, url_prefix='/api/webhooks')
-    app.register_blueprint(sequence_bp, url_prefix='/api/sequence')
-    app.register_blueprint(analytics_bp, url_prefix='/api/analytics')
-    app.register_blueprint(linkedin_account_bp, url_prefix='/api/linkedin-accounts')
-    app.register_blueprint(unipile_auth_bp, url_prefix='/api/unipile-auth')
-    app.register_blueprint(user_bp, url_prefix='/api/users')
-    app.register_blueprint(admin_bp, url_prefix='/api/admin')
+    try:
+        from src.routes.client import client_bp
+        app.register_blueprint(client_bp, url_prefix='/api/clients')
+        app.logger.info("Registered client blueprint")
+    except Exception as e:
+        app.logger.error(f"Failed to register client blueprint: {str(e)}")
+    
+    try:
+        from src.routes.campaign import campaign_bp
+        app.register_blueprint(campaign_bp, url_prefix='/api/campaigns')
+        app.logger.info("Registered campaign blueprint")
+    except Exception as e:
+        app.logger.error(f"Failed to register campaign blueprint: {str(e)}")
+    
+    try:
+        from src.routes.lead import lead_bp
+        app.register_blueprint(lead_bp, url_prefix='/api/leads')
+        app.logger.info("Registered lead blueprint")
+    except Exception as e:
+        app.logger.error(f"Failed to register lead blueprint: {str(e)}")
+    
+    try:
+        from src.routes.automation import automation_bp
+        app.register_blueprint(automation_bp, url_prefix='/api/automation')
+        app.logger.info("Registered automation blueprint")
+    except Exception as e:
+        app.logger.error(f"Failed to register automation blueprint: {str(e)}")
+    
+    try:
+        from src.routes.webhook import webhook_bp
+        app.register_blueprint(webhook_bp, url_prefix='/api/webhooks')
+        app.logger.info("Registered webhook blueprint")
+    except Exception as e:
+        app.logger.error(f"Failed to register webhook blueprint: {str(e)}")
+    
+    try:
+        from src.routes.sequence import sequence_bp
+        app.register_blueprint(sequence_bp, url_prefix='/api/sequence')
+        app.logger.info("Registered sequence blueprint")
+    except Exception as e:
+        app.logger.error(f"Failed to register sequence blueprint: {str(e)}")
+    
+    try:
+        from src.routes.analytics import analytics_bp
+        app.register_blueprint(analytics_bp, url_prefix='/api/analytics')
+        app.logger.info("Registered analytics blueprint")
+    except Exception as e:
+        app.logger.error(f"Failed to register analytics blueprint: {str(e)}")
+    
+    try:
+        from src.routes.linkedin_account import linkedin_account_bp
+        app.register_blueprint(linkedin_account_bp, url_prefix='/api/linkedin-accounts')
+        app.logger.info("Registered linkedin_account blueprint")
+    except Exception as e:
+        app.logger.error(f"Failed to register linkedin_account blueprint: {str(e)}")
+    
+    try:
+        from src.routes.unipile_auth import unipile_auth_bp
+        app.register_blueprint(unipile_auth_bp, url_prefix='/api/unipile-auth')
+        app.logger.info("Registered unipile_auth blueprint")
+    except Exception as e:
+        app.logger.error(f"Failed to register unipile_auth blueprint: {str(e)}")
+    
+    try:
+        from src.routes.user import user_bp
+        app.register_blueprint(user_bp, url_prefix='/api/users')
+        app.logger.info("Registered user blueprint")
+    except Exception as e:
+        app.logger.error(f"Failed to register user blueprint: {str(e)}")
+    
+    try:
+        from src.routes.admin import admin_bp
+        app.register_blueprint(admin_bp, url_prefix='/api/admin')
+        app.logger.info("Registered admin blueprint")
+    except Exception as e:
+        app.logger.error(f"Failed to register admin blueprint: {str(e)}")
     
     # Initialize scheduler with app context
     from src.services.scheduler import get_outreach_scheduler  # Now uses modular structure

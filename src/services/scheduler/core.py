@@ -90,23 +90,23 @@ class OutreachScheduler:
     # Add the missing methods as class methods
     def _get_today_usage_counts(self, provider_account_id: str) -> dict:
         """Get today's usage counts for a LinkedIn account."""
-        return _get_today_usage_counts(provider_account_id)
+        return _get_today_usage_counts(self, provider_account_id)
     
     def _can_send_invite_for_account(self, provider_account_id: str) -> bool:
         """Check if we can send an invite for a LinkedIn account."""
-        return _can_send_invite_for_account(provider_account_id)
+        return _can_send_invite_for_account(self, provider_account_id)
     
-    def _can_send_message_for_account(self, provider_account_id: str) -> bool:
+    def _can_send_message_for_account(self, provider_account_id: str, is_first_level: bool = False) -> bool:
         """Check if we can send a message for a LinkedIn account."""
-        return _can_send_message_for_account(provider_account_id)
+        return _can_send_message_for_account(self, provider_account_id, is_first_level)
     
     def _increment_usage(self, provider_account_id: str, action_type: str):
         """Increment usage for a LinkedIn account."""
-        return _increment_usage(provider_account_id, action_type)
+        return _increment_usage(self, provider_account_id, action_type)
     
     def _reset_daily_counters(self):
         """Reset daily counters."""
-        return _reset_daily_counters()
+        return _reset_daily_counters(self)
     
     def _is_lead_ready_for_processing(self, lead: Lead) -> bool:
         """Check if a lead is ready for processing."""
@@ -116,9 +116,9 @@ class OutreachScheduler:
         """Process a single lead."""
         return _process_single_lead(self, lead)
     
-    def _get_step_number(self, lead: Lead) -> int:
+    def _get_step_number(self, lead: Lead, next_step=None) -> int:
         """Get the current step number for a lead."""
-        return _get_step_number(lead)
+        return _get_step_number(self, lead, next_step)
     
     def _get_required_delay_for_step(self, step_number: int) -> int:
         """Get the required delay for a step."""
@@ -146,11 +146,11 @@ class OutreachScheduler:
     
     def _run_conversation_id_backfill(self):
         """Run conversation ID backfill."""
-        return _run_conversation_id_backfill()
+        return _run_conversation_id_backfill(self)
     
     def _run_rate_usage_backfill(self):
         """Run rate usage backfill."""
-        return _run_rate_usage_backfill()
+        return _run_rate_usage_backfill(self)
     
     def _get_sequence_engine(self):
         """Get sequence engine instance (lazy initialization)."""

@@ -62,7 +62,7 @@ def create_app(config_name=None):
     app.register_blueprint(admin_bp, url_prefix='/api/admin')
     
     # Initialize scheduler with app context
-    from src.services.scheduler import get_outreach_scheduler
+    from src.services.scheduler import get_outreach_scheduler  # Now uses modular structure
     global outreach_scheduler
     outreach_scheduler = get_outreach_scheduler()
     outreach_scheduler.init_app(app)

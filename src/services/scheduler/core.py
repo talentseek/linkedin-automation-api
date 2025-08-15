@@ -21,6 +21,7 @@ from src.extensions import db
 from src.models import Lead, LinkedInAccount, Campaign, Event
 from src.services.sequence_engine import SequenceEngine
 from src.models.rate_usage import RateUsage
+from src.services.unipile_client import UnipileClient
 
 # Import methods from separate modules
 from .rate_limiting import (
@@ -130,11 +131,13 @@ class OutreachScheduler:
     
     def _process_relation(self, relation_data: dict, linkedin_account: LinkedInAccount):
         """Process a relation."""
-        return _process_relation(self, relation_data, linkedin_account)
+        return _process_relation(self, relation_data, linkedin_account.account_id)
     
     def _check_sent_invitations(self, linkedin_account: LinkedInAccount):
         """Check sent invitations for a LinkedIn account."""
-        return _check_sent_invitations(self, linkedin_account)
+        # Get Unipile client
+        unipile = UnipileClient()
+        return _check_sent_invitations(self, linkedin_account.account_id, unipile)
     
     def _process_sent_invitation(self, invitation_data: dict, linkedin_account: LinkedInAccount):
         """Process a sent invitation."""

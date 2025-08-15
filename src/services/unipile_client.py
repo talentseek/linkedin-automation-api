@@ -232,6 +232,7 @@ class UnipileClient:
         Docs primary: POST /api/v1/chats/{chat_id}/messages (multipart form) with field `text`.
         """
         files = {
+            'account_id': (None, account_id),  # Fixed: include account_id in request
             'text': (None, message)
         }
         alt_endpoint = f"/api/v1/chats/{conversation_id}/messages"
@@ -311,7 +312,7 @@ class UnipileClient:
 
         Params are forwarded as query parameters; include account_id to scope results.
         """
-        params = {"account_id": account_id}
+        params = {"account_id": [account_id]}  # Fixed: account_id should be an array
         if after:
             params["after"] = after
         if before:

@@ -102,7 +102,7 @@ def configure_unified_webhook():
         
         # Register new unified webhook
         events = ['new_relation', 'message_received', 'message_read', 'account_status']
-        webhook = unipile.register_webhook(url=webhook_url, events=events)
+        webhook = unipile.create_webhook(request_url=webhook_url, events=events)
         
         return jsonify({
             'message': 'Unified webhook configured successfully',

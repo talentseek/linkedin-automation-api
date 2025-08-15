@@ -534,3 +534,42 @@ def test_notification():
         logger.error(f"Error sending test notification: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
+
+@automation_bp.route('/notifications/simple-test', methods=['POST'])
+# @jwt_required()  # Temporarily removed for development
+def simple_test_notification():
+    """Simple test notification to verify Resend is working."""
+    try:
+        import resend
+        import os
+        
+        # Get API key from environment
+        api_key = os.environ.get('RESEND_API_KEY')
+        if not api_key:
+            return jsonify({'error': 'No Resend API key found'}), 400
+        
+        resend.api_key = api_key
+        
+        # Send a simple test email
+        response = resend.Emails.send({
+            "from": "notifications@send.notifications.costperdemo.com",
+            "to": "michael@costperdemo.com",
+            "subject": "🧪 Test Notification - LinkedIn Automation API",
+            "html": """
+            <h2>Test Notification</h2>
+            <p>This is a simple test to verify that Resend is working correctly.</p>
+            <p><strong>Time:</strong> """ + datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC') + """</p>
+            <p>If you receive this email, the notification system is working!</p>
+            """
+        })
+        
+        return jsonify({
+            'message': 'Simple test notification sent successfully',
+            'email_id': response.get('id'),
+            'response': response
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error in simple test notification: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+

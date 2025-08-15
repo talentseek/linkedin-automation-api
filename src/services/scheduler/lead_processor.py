@@ -68,7 +68,10 @@ def _is_lead_ready_for_processing(self, lead):
 def _process_single_lead(self, lead):
     """Process a single lead."""
     try:
+        # Refresh lead from database to ensure we have latest data
+        db.session.refresh(lead)
         logger.info(f"Processing lead {lead.id} (status: {lead.status})")
+        logger.info(f"Lead details: {lead.first_name} {lead.last_name} from {lead.company_name}")
         
         # Get the campaign and LinkedIn account
         campaign = Campaign.query.get(lead.campaign_id)
@@ -101,6 +104,10 @@ def _process_single_lead(self, lead):
         
         # Execute the step
         try:
+            # Double-check lead data before execution
+            logger.info(f"About to execute step for lead: {lead.first_name} {lead.last_name} (ID: {lead.id})")
+            logger.info(f"Step data: {next_step}")
+            
             result = sequence_engine.execute_step(lead, next_step, linkedin_account)
             
             if result.get('success'):

@@ -122,7 +122,7 @@ class OutreachScheduler:
     
     def _get_required_delay_for_step(self, step_number: int) -> int:
         """Get the required delay for a step."""
-        return _get_required_delay_for_step(step_number)
+        return _get_required_delay_for_step(self, step_number)
     
     def _check_single_account_relations(self, linkedin_account: LinkedInAccount):
         """Check relations for a single LinkedIn account."""

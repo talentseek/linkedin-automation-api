@@ -917,7 +917,7 @@ paths:
   /api/analytics/campaigns/{campaign_id}/summary:
     get:
       summary: Get campaign analytics summary
-      description: Retrieve analytics summary for a campaign
+      description: Retrieve comprehensive analytics summary for a campaign including conversion funnel, time-based analytics, and predictive analytics
       tags: [Analytics]
       parameters:
         - name: campaign_id
@@ -925,9 +925,38 @@ paths:
           required: true
           schema:
             type: string
+        - name: days
+          in: query
+          schema:
+            type: integer
+            default: 7
+            description: Number of days to analyze
       responses:
         '200':
-          description: Campaign analytics summary
+          description: Campaign analytics summary with enhanced metrics
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  campaign_id:
+                    type: string
+                  campaign_name:
+                    type: string
+                  status:
+                    type: string
+                  total_leads:
+                    type: integer
+                  lead_statistics:
+                    type: object
+                  connection_breakdown:
+                    type: object
+                  conversion_funnel:
+                    type: object
+                  time_based_analytics:
+                    type: object
+                  predictive_analytics:
+                    type: object
 
   /api/analytics/campaigns/{campaign_id}/timeseries:
     get:
@@ -949,6 +978,54 @@ paths:
         '200':
           description: Campaign timeseries data
 
+  /api/analytics/campaigns/{campaign_id}/export/csv:
+    get:
+      summary: Export campaign data to CSV
+      description: Export campaign data in CSV format (leads, events, or analytics)
+      tags: [Analytics]
+      parameters:
+        - name: campaign_id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: type
+          in: query
+          schema:
+            type: string
+            enum: [leads, events, analytics]
+            default: leads
+            description: Type of data to export
+        - name: days
+          in: query
+          schema:
+            type: integer
+            default: 30
+            description: Number of days for events/analytics export
+      responses:
+        '200':
+          description: CSV file download
+          content:
+            text/csv:
+              schema:
+                type: string
+                format: binary
+
+  /api/analytics/campaigns/{campaign_id}/first-level-connections:
+    get:
+      summary: Get 1st level connections analytics
+      description: Retrieve dedicated analytics for 1st level connections performance
+      tags: [Analytics]
+      parameters:
+        - name: campaign_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 1st level connections analytics
+
   /api/analytics/accounts/{linkedin_account_id}/rate-usage:
     get:
       summary: Get rate usage for LinkedIn account
@@ -960,9 +1037,135 @@ paths:
           required: true
           schema:
             type: string
+        - name: days
+          in: query
+          schema:
+            type: integer
+            default: 7
       responses:
         '200':
           description: Rate usage data
+
+  /api/analytics/clients/{client_id}/comparative-analytics:
+    get:
+      summary: Get comparative analytics for client
+      description: Retrieve comparative analytics across all campaigns for a client
+      tags: [Analytics]
+      parameters:
+        - name: client_id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: days
+          in: query
+          schema:
+            type: integer
+            default: 30
+      responses:
+        '200':
+          description: Client comparative analytics
+
+  /api/analytics/comparative/campaigns:
+    get:
+      summary: Get comparative analytics across all campaigns
+      description: Retrieve comparative analytics across all campaigns in the system
+      tags: [Analytics]
+      parameters:
+        - name: days
+          in: query
+          schema:
+            type: integer
+            default: 30
+      responses:
+        '200':
+          description: System-wide comparative analytics
+
+  /api/analytics/real-time/activity:
+    get:
+      summary: Get real-time activity
+      description: Retrieve real-time activity across all campaigns (last 24 hours)
+      tags: [Analytics]
+      responses:
+        '200':
+          description: Real-time activity data
+
+  /api/analytics/weekly-stats/generate:
+    post:
+      summary: Generate weekly statistics
+      description: Generate and send weekly statistics for a specific client
+      tags: [Analytics]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                client_id:
+                  type: string
+                  description: Client ID to generate statistics for
+                recipient_email:
+                  type: string
+                  description: Optional recipient email (defaults to client email)
+      responses:
+        '200':
+          description: Weekly report sent successfully
+
+  /api/analytics/weekly-stats/send-all:
+    post:
+      summary: Send all weekly reports
+      description: Send weekly reports to all active clients
+      tags: [Analytics]
+      responses:
+        '200':
+          description: Weekly reports sent to all clients
+
+  /api/analytics/weekly-stats/preview/{client_id}:
+    get:
+      summary: Preview weekly statistics
+      description: Preview weekly statistics for a client without sending email
+      tags: [Analytics]
+      parameters:
+        - name: client_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Weekly statistics preview
+
+  /api/analytics/weekly-stats/settings:
+    get:
+      summary: Get weekly statistics settings
+      description: Retrieve weekly statistics configuration
+      tags: [Analytics]
+      responses:
+        '200':
+          description: Weekly statistics settings
+
+  /api/analytics/weekly-stats/test:
+    post:
+      summary: Test weekly statistics
+      description: Test weekly statistics by sending a sample report
+      tags: [Analytics]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                client_id:
+                  type: string
+                  description: Client ID to test
+                test_email:
+                  type: string
+                  description: Test email address
+      responses:
+        '200':
+          description: Test report sent successfully
 
   # =============================================================================
   # UNIPILE AUTH ENDPOINTS

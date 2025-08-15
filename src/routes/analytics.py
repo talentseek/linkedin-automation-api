@@ -1,11 +1,14 @@
 import logging
 from datetime import datetime, timedelta
 from collections import defaultdict, OrderedDict
+import csv
+import io
+import json
 
-from flask import Blueprint, jsonify, request, current_app
+from flask import Blueprint, jsonify, request, current_app, send_file
 from flask_jwt_extended import jwt_required
 
-from src.models import db, Campaign, Lead, Event, LinkedInAccount
+from src.models import db, Campaign, Lead, Event, LinkedInAccount, Client
 from src.models.rate_usage import RateUsage
 
 
@@ -27,6 +30,192 @@ def _bucket_events_by_day(events):
         day = ev.timestamp.date()
         buckets[day].append(ev)
     return buckets
+
+
+def _calculate_conversion_funnel(campaign_id, days=30):
+    """Calculate conversion funnel metrics for a campaign."""
+    try:
+        since = datetime.utcnow() - timedelta(days=days)
+        
+        # Get all leads for the campaign
+        leads = Lead.query.filter_by(campaign_id=campaign_id).all()
+        
+        # Get events for the period
+        events = (
+            db.session.query(Event)
+            .join(Lead, Lead.id == Event.lead_id)
+            .filter(Lead.campaign_id == campaign_id, Event.timestamp >= since)
+            .all()
+        )
+        
+        # Calculate funnel metrics
+        total_leads = len(leads)
+        invites_sent = sum(1 for e in events if e.event_type == "connection_request_sent")
+        connections_made = sum(1 for e in events if e.event_type in ["connection_accepted", "connection_accepted_historical"])
+        messages_sent = sum(1 for e in events if e.event_type == "message_sent")
+        replies_received = sum(1 for e in events if e.event_type == "message_received")
+        
+        # Calculate conversion rates
+        invite_to_connect_rate = (connections_made / invites_sent * 100) if invites_sent > 0 else 0
+        connect_to_message_rate = (messages_sent / connections_made * 100) if connections_made > 0 else 0
+        message_to_reply_rate = (replies_received / messages_sent * 100) if messages_sent > 0 else 0
+        overall_conversion_rate = (replies_received / total_leads * 100) if total_leads > 0 else 0
+        
+        return {
+            "total_leads": total_leads,
+            "invites_sent": invites_sent,
+            "connections_made": connections_made,
+            "messages_sent": messages_sent,
+            "replies_received": replies_received,
+            "conversion_rates": {
+                "invite_to_connect": round(invite_to_connect_rate, 2),
+                "connect_to_message": round(connect_to_message_rate, 2),
+                "message_to_reply": round(message_to_reply_rate, 2),
+                "overall_conversion": round(overall_conversion_rate, 2)
+            },
+            "funnel_stages": [
+                {"stage": "Total Leads", "count": total_leads, "percentage": 100},
+                {"stage": "Invites Sent", "count": invites_sent, "percentage": round(invites_sent / total_leads * 100, 2) if total_leads > 0 else 0},
+                {"stage": "Connections Made", "count": connections_made, "percentage": round(connections_made / total_leads * 100, 2) if total_leads > 0 else 0},
+                {"stage": "Messages Sent", "count": messages_sent, "percentage": round(messages_sent / total_leads * 100, 2) if total_leads > 0 else 0},
+                {"stage": "Replies Received", "count": replies_received, "percentage": round(replies_received / total_leads * 100, 2) if total_leads > 0 else 0}
+            ]
+        }
+    except Exception as e:
+        logger.error(f"Error calculating conversion funnel: {str(e)}")
+        return None
+
+
+def _calculate_time_based_analytics(campaign_id, days=30):
+    """Calculate time-based analytics including optimal sending times."""
+    try:
+        since = datetime.utcnow() - timedelta(days=days)
+        
+        events = (
+            db.session.query(Event)
+            .join(Lead, Lead.id == Event.lead_id)
+            .filter(Lead.campaign_id == campaign_id, Event.timestamp >= since)
+            .all()
+        )
+        
+        # Group events by hour of day
+        hourly_stats = defaultdict(lambda: {"sent": 0, "replies": 0})
+        
+        for event in events:
+            if event.timestamp:
+                hour = event.timestamp.hour
+                if event.event_type == "message_sent":
+                    hourly_stats[hour]["sent"] += 1
+                elif event.event_type == "message_received":
+                    hourly_stats[hour]["replies"] += 1
+        
+        # Calculate reply rates by hour
+        hourly_reply_rates = {}
+        for hour in range(24):
+            sent = hourly_stats[hour]["sent"]
+            replies = hourly_stats[hour]["replies"]
+            rate = (replies / sent * 100) if sent > 0 else 0
+            hourly_reply_rates[hour] = {
+                "messages_sent": sent,
+                "replies_received": replies,
+                "reply_rate": round(rate, 2)
+            }
+        
+        # Find optimal sending times (top 3 hours by reply rate)
+        optimal_hours = sorted(
+            [(hour, data["reply_rate"]) for hour, data in hourly_reply_rates.items() if data["messages_sent"] > 0],
+            key=lambda x: x[1],
+            reverse=True
+        )[:3]
+        
+        # Calculate average response time
+        response_times = []
+        by_lead_events = defaultdict(list)
+        for ev in events:
+            by_lead_events[ev.lead_id].append(ev)
+        
+        for lead_id, evs in by_lead_events.items():
+            msgs = sorted([e for e in evs if e.event_type == "message_sent"], key=lambda e: e.timestamp)
+            reps = sorted([e for e in evs if e.event_type == "message_received"], key=lambda e: e.timestamp)
+            if msgs and reps:
+                dt = (reps[0].timestamp - msgs[0].timestamp).total_seconds() / 3600.0  # hours
+                if dt >= 0:
+                    response_times.append(dt)
+        
+        avg_response_time = sum(response_times) / len(response_times) if response_times else 0
+        
+        return {
+            "hourly_reply_rates": hourly_reply_rates,
+            "optimal_sending_hours": [
+                {"hour": hour, "reply_rate": rate, "formatted_time": f"{hour:02d}:00"}
+                for hour, rate in optimal_hours
+            ],
+            "average_response_time_hours": round(avg_response_time, 2),
+            "response_time_analysis": {
+                "fast_responses": len([t for t in response_times if t <= 1]),  # within 1 hour
+                "medium_responses": len([t for t in response_times if 1 < t <= 24]),  # within 24 hours
+                "slow_responses": len([t for t in response_times if t > 24])  # over 24 hours
+            }
+        }
+    except Exception as e:
+        logger.error(f"Error calculating time-based analytics: {str(e)}")
+        return None
+
+
+def _calculate_predictive_analytics(campaign_id):
+    """Calculate predictive analytics for campaign performance."""
+    try:
+        # Get campaign data
+        campaign = Campaign.query.get(campaign_id)
+        if not campaign:
+            return None
+        
+        # Get historical performance
+        events = (
+            db.session.query(Event)
+            .join(Lead, Lead.id == Event.lead_id)
+            .filter(Lead.campaign_id == campaign_id)
+            .all()
+        )
+        
+        total_leads = len(campaign.leads)
+        total_messages = sum(1 for e in events if e.event_type == "message_sent")
+        total_replies = sum(1 for e in events if e.event_type == "message_received")
+        
+        # Calculate historical reply rate
+        historical_reply_rate = (total_replies / total_messages * 100) if total_messages > 0 else 0
+        
+        # Predict future performance
+        remaining_leads = sum(1 for lead in campaign.leads if lead.status in ["pending_invite", "invite_sent", "connected"])
+        predicted_messages = remaining_leads * 2  # Assume 2 messages per lead on average
+        predicted_replies = predicted_messages * (historical_reply_rate / 100)
+        
+        # Calculate campaign completion estimate
+        avg_messages_per_day = total_messages / 30 if total_messages > 0 else 0  # Assume 30 days of data
+        days_to_completion = predicted_messages / avg_messages_per_day if avg_messages_per_day > 0 else 0
+        
+        return {
+            "historical_performance": {
+                "total_leads": total_leads,
+                "total_messages": total_messages,
+                "total_replies": total_replies,
+                "reply_rate": round(historical_reply_rate, 2)
+            },
+            "predictions": {
+                "remaining_leads": remaining_leads,
+                "predicted_messages": round(predicted_messages, 0),
+                "predicted_replies": round(predicted_replies, 0),
+                "predicted_reply_rate": round(historical_reply_rate, 2),
+                "days_to_completion": round(days_to_completion, 1)
+            },
+            "confidence_metrics": {
+                "data_points": total_messages,
+                "confidence_level": "high" if total_messages > 50 else "medium" if total_messages > 20 else "low"
+            }
+        }
+    except Exception as e:
+        logger.error(f"Error calculating predictive analytics: {str(e)}")
+        return None
 
 
 @analytics_bp.route("/campaigns/<campaign_id>/summary", methods=["GET"])
@@ -209,6 +398,11 @@ def campaign_summary(campaign_id: str):
         except Exception:
             pass
 
+        # Enhanced analytics
+        conversion_funnel = _calculate_conversion_funnel(campaign_id, days_param)
+        time_analytics = _calculate_time_based_analytics(campaign_id, days_param)
+        predictive_analytics = _calculate_predictive_analytics(campaign_id)
+
         return jsonify(
             {
                 "campaign_id": campaign.id,
@@ -246,6 +440,10 @@ def campaign_summary(campaign_id: str):
                 "time_to_first_reply_days_median": tfr_median,
                 "reply_distribution_by_step": reply_distribution,
                 "per_account_reply_rates": per_account,
+                # Enhanced analytics
+                "conversion_funnel": conversion_funnel,
+                "time_based_analytics": time_analytics,
+                "predictive_analytics": predictive_analytics,
             }
         ), 200
     except Exception as e:
@@ -660,6 +858,464 @@ def test_weekly_statistics():
             
     except Exception as e:
         logger.error(f"Error testing weekly statistics: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+# =============================================================================
+# EXPORT FUNCTIONALITY
+# =============================================================================
+
+@analytics_bp.route('/campaigns/<campaign_id>/export/csv', methods=['GET'])
+# @jwt_required()  # Temporarily removed for development
+def export_campaign_csv(campaign_id: str):
+    """Export campaign data to CSV format."""
+    try:
+        campaign = Campaign.query.get(campaign_id)
+        if not campaign:
+            return jsonify({"error": "Campaign not found"}), 404
+        
+        # Get export type
+        export_type = request.args.get('type', 'leads')  # leads, events, analytics
+        
+        if export_type == 'leads':
+            return _export_leads_csv(campaign)
+        elif export_type == 'events':
+            return _export_events_csv(campaign)
+        elif export_type == 'analytics':
+            return _export_analytics_csv(campaign)
+        else:
+            return jsonify({"error": "Invalid export type. Use 'leads', 'events', or 'analytics'"}), 400
+            
+    except Exception as e:
+        logger.error(f"Error exporting campaign CSV: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+def _export_leads_csv(campaign):
+    """Export leads data to CSV."""
+    try:
+        # Create CSV data
+        output = io.StringIO()
+        writer = csv.writer(output)
+        
+        # Write header
+        writer.writerow([
+            'Lead ID', 'First Name', 'Last Name', 'Company', 'Status', 
+            'Current Step', 'Connection Type', 'Created At', 'Last Activity'
+        ])
+        
+        # Write data
+        for lead in campaign.leads:
+            connection_type = '1st Level' if (lead.meta_json and lead.meta_json.get('source') == 'first_level_connections') else 'Regular'
+            
+            # Get last activity
+            last_event = (
+                db.session.query(Event)
+                .filter(Event.lead_id == lead.id)
+                .order_by(Event.timestamp.desc())
+                .first()
+            )
+            last_activity = last_event.timestamp.isoformat() if last_event and last_event.timestamp else ''
+            
+            writer.writerow([
+                lead.id,
+                lead.first_name or '',
+                lead.last_name or '',
+                lead.company_name or '',
+                lead.status,
+                lead.current_step,
+                connection_type,
+                lead.created_at.isoformat() if lead.created_at else '',
+                last_activity
+            ])
+        
+        # Create response
+        output.seek(0)
+        return send_file(
+            io.BytesIO(output.getvalue().encode('utf-8')),
+            mimetype='text/csv',
+            as_attachment=True,
+            download_name=f'{campaign.name}_leads_{datetime.utcnow().strftime("%Y%m%d")}.csv'
+        )
+        
+    except Exception as e:
+        logger.error(f"Error exporting leads CSV: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+def _export_events_csv(campaign):
+    """Export events data to CSV."""
+    try:
+        # Get date range
+        days = request.args.get('days', default=30, type=int)
+        since = datetime.utcnow() - timedelta(days=days)
+        
+        # Get events
+        events = (
+            db.session.query(Event)
+            .join(Lead, Lead.id == Event.lead_id)
+            .filter(Lead.campaign_id == campaign.id, Event.timestamp >= since)
+            .order_by(Event.timestamp.desc())
+            .all()
+        )
+        
+        # Create CSV data
+        output = io.StringIO()
+        writer = csv.writer(output)
+        
+        # Write header
+        writer.writerow([
+            'Event ID', 'Lead ID', 'Lead Name', 'Event Type', 'Timestamp', 
+            'Meta Data', 'LinkedIn Account'
+        ])
+        
+        # Write data
+        for event in events:
+            lead = Lead.query.get(event.lead_id)
+            lead_name = f"{lead.first_name} {lead.last_name}" if lead else 'Unknown'
+            
+            writer.writerow([
+                event.id,
+                event.lead_id,
+                lead_name,
+                event.event_type,
+                event.timestamp.isoformat() if event.timestamp else '',
+                json.dumps(event.meta_json) if event.meta_json else '',
+                (event.meta_json or {}).get('linkedin_account_id', '')
+            ])
+        
+        # Create response
+        output.seek(0)
+        return send_file(
+            io.BytesIO(output.getvalue().encode('utf-8')),
+            mimetype='text/csv',
+            as_attachment=True,
+            download_name=f'{campaign.name}_events_{datetime.utcnow().strftime("%Y%m%d")}.csv'
+        )
+        
+    except Exception as e:
+        logger.error(f"Error exporting events CSV: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+def _export_analytics_csv(campaign):
+    """Export analytics data to CSV."""
+    try:
+        # Get analytics data
+        days = request.args.get('days', default=30, type=int)
+        since = datetime.utcnow() - timedelta(days=days)
+        
+        # Get events for timeseries
+        events = (
+            db.session.query(Event)
+            .join(Lead, Lead.id == Event.lead_id)
+            .filter(Lead.campaign_id == campaign.id, Event.timestamp >= since)
+            .all()
+        )
+        
+        buckets = _bucket_events_by_day(events)
+        days_range = _daterange(days)
+        
+        # Create CSV data
+        output = io.StringIO()
+        writer = csv.writer(output)
+        
+        # Write header
+        writer.writerow([
+            'Date', 'Invites Sent', 'Messages Sent', 'Replies Received', 
+            'Connections Made', '1st Level Messages', 'Regular Messages'
+        ])
+        
+        # Write data
+        for d in days_range:
+            day_events = buckets.get(d, [])
+            
+            invites = sum(1 for e in day_events if e.event_type == "connection_request_sent")
+            messages = sum(1 for e in day_events if e.event_type == "message_sent")
+            replies = sum(1 for e in day_events if e.event_type == "message_received")
+            connections = sum(1 for e in day_events if e.event_type in ["connection_accepted", "connection_accepted_historical"])
+            
+            # Separate 1st level vs regular messages
+            first_level_messages = 0
+            regular_messages = 0
+            for e in day_events:
+                if e.event_type == "message_sent":
+                    lead = Lead.query.get(e.lead_id)
+                    if lead and lead.meta_json and lead.meta_json.get('source') == 'first_level_connections':
+                        first_level_messages += 1
+                    else:
+                        regular_messages += 1
+            
+            writer.writerow([
+                d.isoformat(),
+                invites,
+                messages,
+                replies,
+                connections,
+                first_level_messages,
+                regular_messages
+            ])
+        
+        # Create response
+        output.seek(0)
+        return send_file(
+            io.BytesIO(output.getvalue().encode('utf-8')),
+            mimetype='text/csv',
+            as_attachment=True,
+            download_name=f'{campaign.name}_analytics_{datetime.utcnow().strftime("%Y%m%d")}.csv'
+        )
+        
+    except Exception as e:
+        logger.error(f"Error exporting analytics CSV: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+# =============================================================================
+# COMPARATIVE ANALYTICS
+# =============================================================================
+
+@analytics_bp.route('/clients/<client_id>/comparative-analytics', methods=['GET'])
+# @jwt_required()  # Temporarily removed for development
+def client_comparative_analytics(client_id: str):
+    """Get comparative analytics across all campaigns for a client."""
+    try:
+        client = Client.query.get(client_id)
+        if not client:
+            return jsonify({"error": "Client not found"}), 404
+        
+        days = request.args.get('days', default=30, type=int)
+        since = datetime.utcnow() - timedelta(days=days)
+        
+        campaigns_data = []
+        
+        for campaign in client.campaigns:
+            # Get campaign events
+            events = (
+                db.session.query(Event)
+                .join(Lead, Lead.id == Event.lead_id)
+                .filter(Lead.campaign_id == campaign.id, Event.timestamp >= since)
+                .all()
+            )
+            
+            # Calculate metrics
+            total_leads = len(campaign.leads)
+            total_messages = sum(1 for e in events if e.event_type == "message_sent")
+            total_replies = sum(1 for e in events if e.event_type == "message_received")
+            total_invites = sum(1 for e in events if e.event_type == "connection_request_sent")
+            total_connections = sum(1 for e in events if e.event_type in ["connection_accepted", "connection_accepted_historical"])
+            
+            reply_rate = (total_replies / total_messages * 100) if total_messages > 0 else 0
+            connection_rate = (total_connections / total_invites * 100) if total_invites > 0 else 0
+            
+            campaigns_data.append({
+                'campaign_id': campaign.id,
+                'campaign_name': campaign.name,
+                'status': campaign.status,
+                'total_leads': total_leads,
+                'total_messages': total_messages,
+                'total_replies': total_replies,
+                'total_invites': total_invites,
+                'total_connections': total_connections,
+                'reply_rate': round(reply_rate, 2),
+                'connection_rate': round(connection_rate, 2),
+                'messages_per_lead': round(total_messages / total_leads, 2) if total_leads > 0 else 0,
+                'replies_per_lead': round(total_replies / total_leads, 2) if total_leads > 0 else 0
+            })
+        
+        # Calculate averages
+        if campaigns_data:
+            avg_reply_rate = sum(c['reply_rate'] for c in campaigns_data) / len(campaigns_data)
+            avg_connection_rate = sum(c['connection_rate'] for c in campaigns_data) / len(campaigns_data)
+            avg_messages_per_lead = sum(c['messages_per_lead'] for c in campaigns_data) / len(campaigns_data)
+            avg_replies_per_lead = sum(c['replies_per_lead'] for c in campaigns_data) / len(campaigns_data)
+        else:
+            avg_reply_rate = avg_connection_rate = avg_messages_per_lead = avg_replies_per_lead = 0
+        
+        # Find best performing campaigns
+        best_reply_rate = max(campaigns_data, key=lambda x: x['reply_rate']) if campaigns_data else None
+        best_connection_rate = max(campaigns_data, key=lambda x: x['connection_rate']) if campaigns_data else None
+        
+        return jsonify({
+            'client_id': client.id,
+            'client_name': client.name,
+            'period_days': days,
+            'campaigns': campaigns_data,
+            'summary': {
+                'total_campaigns': len(campaigns_data),
+                'active_campaigns': len([c for c in campaigns_data if c['status'] == 'active']),
+                'total_leads': sum(c['total_leads'] for c in campaigns_data),
+                'total_messages': sum(c['total_messages'] for c in campaigns_data),
+                'total_replies': sum(c['total_replies'] for c in campaigns_data),
+                'average_reply_rate': round(avg_reply_rate, 2),
+                'average_connection_rate': round(avg_connection_rate, 2),
+                'average_messages_per_lead': round(avg_messages_per_lead, 2),
+                'average_replies_per_lead': round(avg_replies_per_lead, 2)
+            },
+            'best_performers': {
+                'best_reply_rate': best_reply_rate,
+                'best_connection_rate': best_connection_rate
+            },
+            'insights': {
+                'reply_rate_variance': round(max(c['reply_rate'] for c in campaigns_data) - min(c['reply_rate'] for c in campaigns_data), 2) if campaigns_data else 0,
+                'connection_rate_variance': round(max(c['connection_rate'] for c in campaigns_data) - min(c['connection_rate'] for c in campaigns_data), 2) if campaigns_data else 0
+            }
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error in client comparative analytics: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@analytics_bp.route('/comparative/campaigns', methods=['GET'])
+# @jwt_required()  # Temporarily removed for development
+def comparative_campaigns_analytics():
+    """Get comparative analytics across all campaigns in the system."""
+    try:
+        days = request.args.get('days', default=30, type=int)
+        since = datetime.utcnow() - timedelta(days=days)
+        
+        # Get all campaigns
+        campaigns = Campaign.query.all()
+        campaigns_data = []
+        
+        for campaign in campaigns:
+            # Get campaign events
+            events = (
+                db.session.query(Event)
+                .join(Lead, Lead.id == Event.lead_id)
+                .filter(Lead.campaign_id == campaign.id, Event.timestamp >= since)
+                .all()
+            )
+            
+            # Calculate metrics
+            total_leads = len(campaign.leads)
+            total_messages = sum(1 for e in events if e.event_type == "message_sent")
+            total_replies = sum(1 for e in events if e.event_type == "message_received")
+            total_invites = sum(1 for e in events if e.event_type == "connection_request_sent")
+            total_connections = sum(1 for e in events if e.event_type in ["connection_accepted", "connection_accepted_historical"])
+            
+            reply_rate = (total_replies / total_messages * 100) if total_messages > 0 else 0
+            connection_rate = (total_connections / total_invites * 100) if total_invites > 0 else 0
+            
+            # Get client info
+            client_name = campaign.client.name if campaign.client else 'Unknown'
+            
+            campaigns_data.append({
+                'campaign_id': campaign.id,
+                'campaign_name': campaign.name,
+                'client_name': client_name,
+                'status': campaign.status,
+                'total_leads': total_leads,
+                'total_messages': total_messages,
+                'total_replies': total_replies,
+                'total_invites': total_invites,
+                'total_connections': total_connections,
+                'reply_rate': round(reply_rate, 2),
+                'connection_rate': round(connection_rate, 2),
+                'messages_per_lead': round(total_messages / total_leads, 2) if total_leads > 0 else 0,
+                'replies_per_lead': round(total_replies / total_leads, 2) if total_leads > 0 else 0
+            })
+        
+        # Sort by reply rate
+        campaigns_data.sort(key=lambda x: x['reply_rate'], reverse=True)
+        
+        # Calculate system-wide averages
+        if campaigns_data:
+            avg_reply_rate = sum(c['reply_rate'] for c in campaigns_data) / len(campaigns_data)
+            avg_connection_rate = sum(c['connection_rate'] for c in campaigns_data) / len(campaigns_data)
+            avg_messages_per_lead = sum(c['messages_per_lead'] for c in campaigns_data) / len(campaigns_data)
+            avg_replies_per_lead = sum(c['replies_per_lead'] for c in campaigns_data) / len(campaigns_data)
+        else:
+            avg_reply_rate = avg_connection_rate = avg_messages_per_lead = avg_replies_per_lead = 0
+        
+        return jsonify({
+            'period_days': days,
+            'campaigns': campaigns_data,
+            'system_summary': {
+                'total_campaigns': len(campaigns_data),
+                'active_campaigns': len([c for c in campaigns_data if c['status'] == 'active']),
+                'total_leads': sum(c['total_leads'] for c in campaigns_data),
+                'total_messages': sum(c['total_messages'] for c in campaigns_data),
+                'total_replies': sum(c['total_replies'] for c in campaigns_data),
+                'average_reply_rate': round(avg_reply_rate, 2),
+                'average_connection_rate': round(avg_connection_rate, 2),
+                'average_messages_per_lead': round(avg_messages_per_lead, 2),
+                'average_replies_per_lead': round(avg_replies_per_lead, 2)
+            },
+            'top_performers': {
+                'top_5_by_reply_rate': campaigns_data[:5],
+                'top_5_by_connection_rate': sorted(campaigns_data, key=lambda x: x['connection_rate'], reverse=True)[:5]
+            }
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error in comparative campaigns analytics: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+# =============================================================================
+# REAL-TIME ANALYTICS
+# =============================================================================
+
+@analytics_bp.route('/real-time/activity', methods=['GET'])
+# @jwt_required()  # Temporarily removed for development
+def real_time_activity():
+    """Get real-time activity across all campaigns."""
+    try:
+        # Get recent activity (last 24 hours)
+        since = datetime.utcnow() - timedelta(hours=24)
+        
+        recent_events = (
+            db.session.query(Event)
+            .join(Lead, Lead.id == Event.lead_id)
+            .join(Campaign, Campaign.id == Lead.campaign_id)
+            .filter(Event.timestamp >= since)
+            .order_by(Event.timestamp.desc())
+            .limit(50)
+            .all()
+        )
+        
+        # Group by campaign
+        by_campaign = defaultdict(list)
+        for event in recent_events:
+            lead = Lead.query.get(event.lead_id)
+            if lead and lead.campaign:
+                by_campaign[lead.campaign.name].append({
+                    'event_id': event.id,
+                    'event_type': event.event_type,
+                    'timestamp': event.timestamp.isoformat() if event.timestamp else None,
+                    'lead_name': f"{lead.first_name} {lead.last_name}" if lead else 'Unknown',
+                    'campaign_name': lead.campaign.name
+                })
+        
+        # Calculate activity summary
+        activity_summary = {
+            'total_events': len(recent_events),
+            'invites_sent': sum(1 for e in recent_events if e.event_type == "connection_request_sent"),
+            'messages_sent': sum(1 for e in recent_events if e.event_type == "message_sent"),
+            'replies_received': sum(1 for e in recent_events if e.event_type == "message_received"),
+            'connections_made': sum(1 for e in recent_events if e.event_type in ["connection_accepted", "connection_accepted_historical"])
+        }
+        
+        return jsonify({
+            'last_updated': datetime.utcnow().isoformat(),
+            'period_hours': 24,
+            'activity_summary': activity_summary,
+            'recent_activity': dict(by_campaign),
+            'latest_events': [
+                {
+                    'event_id': event.id,
+                    'event_type': event.event_type,
+                    'timestamp': event.timestamp.isoformat() if event.timestamp else None,
+                    'lead_name': f"{Lead.query.get(event.lead_id).first_name} {Lead.query.get(event.lead_id).last_name}" if Lead.query.get(event.lead_id) else 'Unknown',
+                    'campaign_name': Lead.query.get(event.lead_id).campaign.name if Lead.query.get(event.lead_id) and Lead.query.get(event.lead_id).campaign else 'Unknown'
+                }
+                for event in recent_events[:10]  # Latest 10 events
+            ]
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error in real-time activity: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 

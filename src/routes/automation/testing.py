@@ -6,49 +6,34 @@ Testing and debugging endpoints.
 ⚠️  All test endpoints must be disabled in production.
 """
 
-This module contains functionality for:
-- Lead processing tests
-- Sequence debugging
-- Message formatting tests
-- Step execution tests
-"""
-
-import logging
-from datetime import datetime, timedelta
-from typing import Dict, Any
-from flask import jsonify, request, current_app
-
-from src.extensions import db
-from src.models import Campaign, Lead, Event, LinkedInAccount, Client
-from src.services.scheduler import get_outreach_scheduler
+from flask import request, jsonify
+from src.routes.automation import automation_bp
+from src.models.lead import Lead
+from src.models.campaign import Campaign
+from src.models.linkedin_account import LinkedInAccount
 from src.services.sequence_engine import SequenceEngine
+from src.services.scheduler import get_outreach_scheduler
+import logging
 
 logger = logging.getLogger(__name__)
-
-# Import the blueprint from the package
-from . import automation_bp
 
 
 @automation_bp.route('/leads/<lead_id>/schedule-step', methods=['POST'])
 def schedule_lead_step(lead_id):
     """Schedule a lead for the next step."""
     try:
-        # Get lead
         lead = Lead.query.get(lead_id)
         if not lead:
             return jsonify({'error': 'Lead not found'}), 404
         
-        # Get scheduler
         scheduler = get_outreach_scheduler()
-        
-        # Schedule the lead step
-        scheduler.schedule_lead_step(lead_id, None)  # linkedin_account_id not needed for scheduling
+        scheduler.schedule_lead_step(lead_id, None)
         
         return jsonify({
-            'message': 'Lead step scheduled successfully',
-            'lead_id': lead_id,
-            'current_step': lead.current_step,
-            'status': lead.status
+            'success': True,
+            'message': f'Lead {lead_id} scheduled for next step',
+            'lead_status': lead.status,
+            'current_step': lead.current_step
         })
         
     except Exception as e:
@@ -58,50 +43,32 @@ def schedule_lead_step(lead_id):
 
 @automation_bp.route('/test/process-leads', methods=['POST'])
 def test_process_leads():
-    """Test processing leads for a campaign."""
+    """Test processing leads (SIMULATION ONLY)."""
     try:
-        data = request.get_json() or {}
-        campaign_id = data.get('campaign_id')
+        scheduler = get_outreach_scheduler()
         
-        if not campaign_id:
-            return jsonify({'error': 'campaign_id is required'}), 400
-        
-        # Get campaign
-        campaign = Campaign.query.get(campaign_id)
-        if not campaign:
-            return jsonify({'error': 'Campaign not found'}), 404
-        
-        # Get leads that are ready for processing
+        # Get leads that would be processed
         leads = Lead.query.filter(
-            Lead.campaign_id == campaign_id,
             Lead.status.in_(['pending_invite', 'connected', 'messaged'])
         ).all()
         
-        results = []
+        ready_leads = []
         for lead in leads:
-            try:
-                # Check if lead is ready for processing
-                scheduler = get_outreach_scheduler()
-                is_ready = scheduler._is_lead_ready_for_processing(lead)
-                
-                results.append({
-                    'lead_id': lead.id,
+            if scheduler._is_lead_ready_for_processing(lead):
+                ready_leads.append({
+                    'id': lead.id,
+                    'name': f"{lead.first_name} {lead.last_name}",
                     'status': lead.status,
                     'current_step': lead.current_step,
-                    'is_ready': is_ready,
-                    'last_step_sent_at': lead.last_step_sent_at.isoformat() if lead.last_step_sent_at else None
-                })
-                
-            except Exception as e:
-                results.append({
-                    'lead_id': lead.id,
-                    'error': str(e)
+                    'company': lead.company_name
                 })
         
         return jsonify({
-            'campaign_id': campaign_id,
+            'success': True,
             'total_leads': len(leads),
-            'results': results
+            'ready_leads': ready_leads,
+            'ready_count': len(ready_leads),
+            'note': 'This was a simulation - no real processing occurred'
         })
         
     except Exception as e:
@@ -111,7 +78,7 @@ def test_process_leads():
 
 @automation_bp.route('/test/sequence-debug', methods=['POST'])
 def test_sequence_debug():
-    """Test sequence debugging for a campaign."""
+    """Test sequence debugging (SIMULATION ONLY)."""
     try:
         data = request.get_json() or {}
         campaign_id = data.get('campaign_id')
@@ -119,27 +86,18 @@ def test_sequence_debug():
         if not campaign_id:
             return jsonify({'error': 'campaign_id is required'}), 400
         
-        # Get campaign
         campaign = Campaign.query.get(campaign_id)
         if not campaign:
             return jsonify({'error': 'Campaign not found'}), 404
         
-        # Get sequence engine
         sequence_engine = SequenceEngine()
-        
-        # Validate sequence
-        sequence = campaign.sequence_json
-        validation = sequence_engine.validate_sequence(sequence)
-        
-        # Get sequence info
-        sequence_info = sequence_engine.get_sequence_info(campaign)
+        sequence_info = sequence_engine.get_sequence_info(campaign.sequence_json)
         
         return jsonify({
             'campaign_id': campaign_id,
             'campaign_name': campaign.name,
-            'sequence_validation': validation,
             'sequence_info': sequence_info,
-            'sequence': sequence
+            'note': 'This was a simulation - no real sequence execution occurred'
         })
         
     except Exception as e:
@@ -149,7 +107,7 @@ def test_sequence_debug():
 
 @automation_bp.route('/test/ready-check', methods=['POST'])
 def test_ready_check():
-    """Test lead readiness check."""
+    """Test lead ready check (SIMULATION ONLY)."""
     try:
         data = request.get_json() or {}
         lead_id = data.get('lead_id')
@@ -157,23 +115,20 @@ def test_ready_check():
         if not lead_id:
             return jsonify({'error': 'lead_id is required'}), 400
         
-        # Get lead
         lead = Lead.query.get(lead_id)
         if not lead:
             return jsonify({'error': 'Lead not found'}), 404
         
-        # Get scheduler
         scheduler = get_outreach_scheduler()
-        
-        # Check if lead is ready
         is_ready = scheduler._is_lead_ready_for_processing(lead)
         
         return jsonify({
             'lead_id': lead_id,
-            'lead_status': lead.status,
+            'lead_name': f"{lead.first_name} {lead.last_name}",
+            'status': lead.status,
             'current_step': lead.current_step,
             'is_ready': is_ready,
-            'last_step_sent_at': lead.last_step_sent_at.isoformat() if lead.last_step_sent_at else None
+            'note': 'This was a simulation - no real processing occurred'
         })
         
     except Exception as e:
@@ -183,7 +138,7 @@ def test_ready_check():
 
 @automation_bp.route('/test/reset-leads', methods=['POST'])
 def test_reset_leads():
-    """Reset leads for testing purposes."""
+    """Test resetting leads (SIMULATION ONLY)."""
     try:
         data = request.get_json() or {}
         campaign_id = data.get('campaign_id')
@@ -191,37 +146,30 @@ def test_reset_leads():
         if not campaign_id:
             return jsonify({'error': 'campaign_id is required'}), 400
         
-        # Get leads for the campaign
+        # Get leads for this campaign
         leads = Lead.query.filter_by(campaign_id=campaign_id).all()
         
         reset_count = 0
         for lead in leads:
-            # Reset lead to initial state
-            lead.status = 'pending_invite'
-            lead.current_step = 0
-            lead.last_step_sent_at = None
-            lead.invite_sent_at = None
-            lead.connected_at = None
-            lead.last_message_sent_at = None
-            reset_count += 1
-        
-        db.session.commit()
+            if lead.status in ['error', 'completed']:
+                reset_count += 1
+                # In simulation, we just count what would be reset
         
         return jsonify({
-            'message': f'Reset {reset_count} leads successfully',
             'campaign_id': campaign_id,
-            'reset_count': reset_count
+            'total_leads': len(leads),
+            'would_reset': reset_count,
+            'note': 'This was a simulation - no leads were actually reset'
         })
         
     except Exception as e:
-        logger.error(f"Error resetting leads: {str(e)}")
-        db.session.rollback()
+        logger.error(f"Error testing lead reset: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 
 @automation_bp.route('/test/format-message', methods=['POST'])
 def test_format_message():
-    """Test message formatting with lead data."""
+    """Test message formatting (SIMULATION ONLY)."""
     try:
         data = request.get_json() or {}
         lead_id = data.get('lead_id')

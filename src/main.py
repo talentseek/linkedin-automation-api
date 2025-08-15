@@ -63,6 +63,7 @@ def create_app(config_name=None):
     
     # Initialize scheduler with app context
     from src.services.scheduler import get_outreach_scheduler  # Now uses modular structure
+    # Sequence engine is now modular and imported by scheduler
     global outreach_scheduler
     outreach_scheduler = get_outreach_scheduler()
     outreach_scheduler.init_app(app)

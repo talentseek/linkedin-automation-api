@@ -9,6 +9,7 @@ from src.models.lead import Lead
 from src.models.event import Event
 from src.models.webhook import Webhook
 from src.models.webhook_data import WebhookData
+from src.models.rate_usage import RateUsage
 
-__all__ = ['db', 'Client', 'LinkedInAccount', 'Campaign', 'Lead', 'Event', 'Webhook', 'WebhookData']
+__all__ = ['db', 'Client', 'LinkedInAccount', 'Campaign', 'Lead', 'Event', 'Webhook', 'WebhookData', 'RateUsage']
 

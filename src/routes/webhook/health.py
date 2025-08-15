@@ -25,7 +25,7 @@ def webhook_health():
         
         # Get recent webhook activity
         recent_webhooks = WebhookData.query.filter(
-            WebhookData.created_at >= datetime.utcnow() - timedelta(hours=24)
+            WebhookData.timestamp >= datetime.utcnow() - timedelta(hours=24)
         ).count()
         
         return jsonify({
@@ -57,19 +57,19 @@ def get_webhook_data():
         # Query recent webhook data
         since_time = datetime.utcnow() - timedelta(hours=hours)
         webhook_data = WebhookData.query.filter(
-            WebhookData.created_at >= since_time
-        ).order_by(WebhookData.created_at.desc()).limit(limit).all()
+            WebhookData.timestamp >= since_time
+        ).order_by(WebhookData.timestamp.desc()).limit(limit).all()
         
         # Format response
         data = []
         for webhook in webhook_data:
             data.append({
                 'id': webhook.id,
-                'created_at': webhook.created_at.isoformat(),
-                'event_type': webhook.event_type,
-                'payload_size': len(webhook.payload) if webhook.payload else 0,
-                'headers': webhook.headers,
-                'processed': webhook.processed
+                'timestamp': webhook.timestamp.isoformat(),
+                'method': webhook.method,
+                'url': webhook.url,
+                'content_type': webhook.content_type,
+                'content_length': webhook.content_length
             })
         
         return jsonify({
@@ -92,26 +92,22 @@ def webhook_status():
         
         # Recent activity (last 24 hours)
         recent_24h = WebhookData.query.filter(
-            WebhookData.created_at >= datetime.utcnow() - timedelta(hours=24)
+            WebhookData.timestamp >= datetime.utcnow() - timedelta(hours=24)
         ).count()
         
         # Recent activity (last hour)
         recent_1h = WebhookData.query.filter(
-            WebhookData.created_at >= datetime.utcnow() - timedelta(hours=1)
+            WebhookData.timestamp >= datetime.utcnow() - timedelta(hours=1)
         ).count()
         
-        # Processed vs unprocessed
-        processed_count = WebhookData.query.filter_by(processed=True).count()
-        unprocessed_count = WebhookData.query.filter_by(processed=False).count()
-        
-        # Event type breakdown
+        # Method breakdown
         from sqlalchemy import func
-        event_types = db.session.query(
-            WebhookData.event_type,
+        method_types = db.session.query(
+            WebhookData.method,
             func.count(WebhookData.id).label('count')
-        ).group_by(WebhookData.event_type).all()
+        ).group_by(WebhookData.method).all()
         
-        event_breakdown = {event_type: count for event_type, count in event_types}
+        method_breakdown = {method: count for method, count in method_types}
         
         return jsonify({
             'status': 'operational',
@@ -119,11 +115,9 @@ def webhook_status():
             'metrics': {
                 'total_webhooks': total_webhooks,
                 'recent_24h': recent_24h,
-                'recent_1h': recent_1h,
-                'processed': processed_count,
-                'unprocessed': unprocessed_count
+                'recent_1h': recent_1h
             },
-            'event_types': event_breakdown,
+            'method_breakdown': method_breakdown,
             'system': {
                 'database': 'connected',
                 'webhook_processing': 'active'

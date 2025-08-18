@@ -104,6 +104,8 @@ def create_app(config_name=None):
         app.logger.info("Registered sequence blueprint")
     except Exception as e:
         app.logger.error(f"Failed to register sequence blueprint: {str(e)}")
+        import traceback
+        app.logger.error(f"Sequence blueprint error traceback: {traceback.format_exc()}")
     
     try:
         from src.routes.analytics import analytics_bp

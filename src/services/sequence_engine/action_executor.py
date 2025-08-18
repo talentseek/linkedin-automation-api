@@ -83,6 +83,25 @@ def _send_connection_request(self, lead: Lead, linkedin_account, message: str) -
             db.session.commit()
             return {'success': False, 'error': error_msg}
 
+        # Check if we already have a successful invitation event for this lead
+        existing_invitation = Event.query.filter_by(
+            lead_id=lead.id,
+            event_type='connection_request_sent'
+        ).first()
+        
+        if existing_invitation:
+            logger.info(f"Invitation already sent for lead {lead.id}, skipping duplicate")
+            # Update lead status to reflect the existing invitation
+            lead.status = 'invite_sent'
+            lead.invite_sent_at = datetime.utcnow()
+            db.session.commit()
+            
+            return {
+                'success': True,
+                'message': 'Invitation already sent previously',
+                'existing_invitation': True
+            }
+        
         # Send connection request via Unipile with resolved provider_id
         try:
             result = unipile.send_connection_request(
@@ -142,20 +161,47 @@ def _send_connection_request(self, lead: Lead, linkedin_account, message: str) -
             error_msg = f"Error sending connection request via Unipile: {str(e)}"
             logger.error(error_msg)
             
-            # Create error event
-            event = Event(
-                event_type='connection_request_failed',
-                lead_id=lead.id,
-                meta_json={
-                    'message': message,
-                    'error': error_msg
+            # Check if this is a 422 error (duplicate invitation)
+            if "422" in str(e) and "Unprocessable Entity" in str(e):
+                logger.info(f"422 error detected - likely duplicate invitation for lead {lead.id}")
+                # Mark as invite_sent since the invitation was already sent
+                lead.status = 'invite_sent'
+                lead.invite_sent_at = datetime.utcnow()
+                
+                # Create success event instead of error
+                event = Event(
+                    event_type='connection_request_sent',
+                    lead_id=lead.id,
+                    meta_json={
+                        'message': message,
+                        'note': 'Duplicate invitation detected - marked as sent',
+                        'original_error': error_msg
+                    }
+                )
+                
+                db.session.add(event)
+                db.session.commit()
+                
+                return {
+                    'success': True,
+                    'message': 'Invitation already sent (duplicate detected)',
+                    'duplicate_detected': True
                 }
-            )
-            
-            db.session.add(event)
-            db.session.commit()
-            
-            return {'success': False, 'error': error_msg}
+            else:
+                # Create error event for other types of errors
+                event = Event(
+                    event_type='connection_request_failed',
+                    lead_id=lead.id,
+                    meta_json={
+                        'message': message,
+                        'error': error_msg
+                    }
+                )
+                
+                db.session.add(event)
+                db.session.commit()
+                
+                return {'success': False, 'error': error_msg}
             
     except Exception as e:
         logger.error(f"Error in _send_connection_request: {str(e)}")

@@ -144,6 +144,7 @@ def create_performance_indexes():
             """
             
             db.session.execute(text(create_sql))
+            db.session.commit()
             logger.info(f"Created index {index['name']} on {index['table']} ({columns_str})")
             created_count += 1
             
@@ -207,6 +208,7 @@ def create_composite_indexes():
             """
             
             db.session.execute(text(create_sql))
+            db.session.commit()
             logger.info(f"Created composite index {index['name']} on {index['table']} ({columns_str})")
             created_count += 1
             

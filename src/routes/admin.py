@@ -285,7 +285,7 @@ def get_connection_pool_stats():
             'checked_in': engine.pool.checkedin(),
             'checked_out': engine.pool.checkedout(),
             'overflow': engine.pool.overflow(),
-            'invalid': engine.pool.invalid()
+            'invalid': getattr(engine.pool, 'invalid', lambda: 0)()
         }
         
         return jsonify({

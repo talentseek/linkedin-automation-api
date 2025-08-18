@@ -84,7 +84,7 @@ def get_campaigns(client_id):
         # Verify client exists
         client = Client.query.get(client_id)
         if not client:
-            return jsonify({'error': 'Client not found'}), 404
+            return handle_not_found_error("Client", client_id)
         
         campaigns = Campaign.query.filter_by(client_id=client_id).all()
         return jsonify({
@@ -101,13 +101,13 @@ def get_campaign(campaign_id):
     try:
         campaign = Campaign.query.get(campaign_id)
         if not campaign:
-            return jsonify({'error': 'Campaign not found'}), 404
+            return handle_not_found_error("Campaign", campaign_id)
         
         return jsonify({
             'campaign': campaign.to_dict()
         }), 200
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return handle_exception(e, "campaign retrieval")
 
 
 @campaign_bp.route('/campaigns/<campaign_id>', methods=['PUT'])
@@ -117,11 +117,11 @@ def update_campaign(campaign_id):
     try:
         campaign = Campaign.query.get(campaign_id)
         if not campaign:
-            return jsonify({'error': 'Campaign not found'}), 404
+            return handle_not_found_error("Campaign", campaign_id)
         
         data = request.get_json()
         if not data:
-            return jsonify({'error': 'No data provided'}), 400
+            return handle_validation_error("No data provided")
         
         if 'name' in data:
             campaign.name = data['name']
@@ -141,7 +141,7 @@ def update_campaign(campaign_id):
         
     except Exception as e:
         db.session.rollback()
-        return jsonify({'error': str(e)}), 500
+        return handle_exception(e, "campaign update")
 
 
 @campaign_bp.route('/campaigns/<campaign_id>', methods=['DELETE'])
@@ -151,7 +151,7 @@ def delete_campaign(campaign_id):
     try:
         campaign = Campaign.query.get(campaign_id)
         if not campaign:
-            return jsonify({'error': 'Campaign not found'}), 404
+            return handle_not_found_error("Campaign", campaign_id)
         
         db.session.delete(campaign)
         db.session.commit()
@@ -162,7 +162,7 @@ def delete_campaign(campaign_id):
         
     except Exception as e:
         db.session.rollback()
-        return jsonify({'error': str(e)}), 500
+        return handle_exception(e, "campaign deletion")
 
 
 @campaign_bp.route('/campaigns/<campaign_id>/leads', methods=['GET'])
@@ -172,7 +172,7 @@ def get_campaign_leads(campaign_id):
     try:
         campaign = Campaign.query.get(campaign_id)
         if not campaign:
-            return jsonify({'error': 'Campaign not found'}), 404
+            return handle_not_found_error("Campaign", campaign_id)
         
         leads = campaign.leads
         return jsonify({
@@ -180,5 +180,5 @@ def get_campaign_leads(campaign_id):
             'total_count': len(leads)
         }), 200
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return handle_exception(e, "campaign leads retrieval")
 

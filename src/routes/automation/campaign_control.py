@@ -79,7 +79,7 @@ def start_campaign(campaign_id):
         
         # Update campaign status
         campaign.status = 'active'
-        campaign.started_at = datetime.utcnow()
+        started_at = datetime.utcnow()
         
         # Create event
         event = Event(
@@ -87,7 +87,7 @@ def start_campaign(campaign_id):
             lead_id=None,
             meta_json={
                 'campaign_id': campaign_id,
-                'started_at': campaign.started_at.isoformat()
+                'started_at': started_at.isoformat()
             }
         )
         
@@ -100,7 +100,7 @@ def start_campaign(campaign_id):
             'message': 'Campaign started successfully',
             'campaign_id': campaign_id,
             'status': 'active',
-            'started_at': campaign.started_at.isoformat()
+            'started_at': started_at.isoformat()
         })
         
     except Exception as e:
@@ -125,7 +125,7 @@ def pause_campaign(campaign_id):
         # Update campaign status
         old_status = campaign.status
         campaign.status = 'paused'
-        campaign.paused_at = datetime.utcnow()
+        paused_at = datetime.utcnow()
         
         # Create event
         event = Event(
@@ -134,7 +134,7 @@ def pause_campaign(campaign_id):
             meta_json={
                 'campaign_id': campaign_id,
                 'previous_status': old_status,
-                'paused_at': campaign.paused_at.isoformat()
+                'paused_at': paused_at.isoformat()
             }
         )
         
@@ -147,7 +147,7 @@ def pause_campaign(campaign_id):
             'message': 'Campaign paused successfully',
             'campaign_id': campaign_id,
             'status': 'paused',
-            'paused_at': campaign.paused_at.isoformat()
+            'paused_at': paused_at.isoformat()
         })
         
     except Exception as e:

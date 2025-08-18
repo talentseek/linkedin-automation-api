@@ -76,45 +76,4 @@ def _validate_campaign_automation(campaign_id):
         return {'valid': False, 'error': str(e)}
 
 
-def _get_rate_limit_status(linkedin_account_id):
-    """Get rate limit status for a LinkedIn account."""
-    try:
-        from src.models.rate_usage import RateUsage
-        
-        # Get today's usage
-        today = datetime.utcnow().date()
-        usage = RateUsage.query.filter_by(
-            provider_account_id=linkedin_account_id,
-            date=today
-        ).first()
-        
-        if not usage:
-            usage = RateUsage(
-                provider_account_id=linkedin_account_id,
-                date=today,
-                connections_sent=0,
-                messages_sent=0
-            )
-            db.session.add(usage)
-            db.session.commit()
-        
-        # Get rate limits from config
-        max_connections = current_app.config.get('MAX_CONNECTIONS_PER_DAY', 25)
-        max_messages = current_app.config.get('MAX_MESSAGES_PER_DAY', 100)
-        
-        return {
-            'linkedin_account_id': linkedin_account_id,
-            'date': today.isoformat(),
-            'connections_sent': usage.connections_sent,
-            'messages_sent': usage.messages_sent,
-            'max_connections': max_connections,
-            'max_messages': max_messages,
-            'connections_remaining': max(0, max_connections - usage.connections_sent),
-            'messages_remaining': max(0, max_messages - usage.messages_sent),
-            'connections_limit_reached': usage.connections_sent >= max_connections,
-            'messages_limit_reached': usage.messages_sent >= max_messages
-        }
-        
-    except Exception as e:
-        logger.error(f"Error getting rate limit status: {str(e)}")
-        return {'error': str(e)}
+

@@ -96,7 +96,7 @@ def _export_leads_csv(campaign):
                 lead.company_name or '',
                 lead.public_identifier or '',
                 lead.status or '',
-                lead.connection_type or '',
+                getattr(lead, 'connection_type', '') or '',
                 lead.current_step or 0,
                 lead.created_at.isoformat() if lead.created_at else '',
                 lead.connected_at.isoformat() if lead.connected_at else '',

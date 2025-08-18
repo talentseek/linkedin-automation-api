@@ -53,7 +53,8 @@ def _is_lead_ready_for_processing(self, lead):
                 logger.info(f"Rate limit reached for invites on account {linkedin_account.account_id}")
                 return False
         else:
-            is_first_level = lead.connection_type == '1st Level'
+            # Handle case where connection_type column doesn't exist yet
+            is_first_level = getattr(lead, 'connection_type', None) == '1st Level'
             if not self._can_send_message_for_account(linkedin_account.account_id, is_first_level):
                 logger.info(f"Rate limit reached for messages on account {linkedin_account.account_id}")
                 return False

@@ -176,7 +176,7 @@ def campaign_first_level_connections(campaign_id):
         # Get first-level connection leads
         first_level_leads = Lead.query.filter(
             Lead.campaign_id == campaign_id,
-            Lead.connection_type == '1st Level'
+            getattr(Lead, 'connection_type', None) == '1st Level'
         ).all()
         
         # Calculate metrics
@@ -191,7 +191,7 @@ def campaign_first_level_connections(campaign_id):
         # Get recent first-level events
         recent_events = Event.query.join(Lead).filter(
             Lead.campaign_id == campaign_id,
-            Lead.connection_type == '1st Level',
+            getattr(Lead, 'connection_type', None) == '1st Level',
             Event.timestamp >= datetime.utcnow() - timedelta(days=7)
         ).order_by(desc(Event.timestamp)).limit(10).all()
         

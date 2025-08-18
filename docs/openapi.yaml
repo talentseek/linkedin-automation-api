@@ -152,8 +152,67 @@ paths:
   /campaigns/{campaign_id}/status:
     get:
       summary: Campaign status and rate limits
+      parameters:
+        - in: path
+          name: campaign_id
+          required: true
+          schema: { type: string }
       responses:
-        '200': { description: OK }
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  campaign_id: { type: string }
+                  campaign_name: { type: string }
+                  status: { type: string }
+                  created_at: { type: string, format: date-time, nullable: true }
+                  statistics:
+                    type: object
+                    properties:
+                      total_leads: { type: integer }
+                      status_breakdown:
+                        type: object
+                        additionalProperties: { type: integer }
+                  recent_events:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: string }
+                        event_type: { type: string }
+                        timestamp: { type: string, format: date-time }
+                        lead_id: { type: string, nullable: true }
+                  linkedin_account:
+                    type: object
+                    properties:
+                      account_id: { type: string, nullable: true }
+                      status: { type: string, nullable: true }
+                  rate_limit_status:
+                    type: object
+                    nullable: true
+                    properties:
+                      linkedin_account_id: { type: string }
+                      date: { type: string }
+                      invites_sent: { type: integer }
+                      messages_sent: { type: integer }
+                      limits:
+                        type: object
+                        properties:
+                          max_connections_per_day: { type: integer }
+                          max_messages_per_day: { type: integer }
+                      remaining:
+                        type: object
+                        properties:
+                          invites: { type: integer }
+                          messages: { type: integer }
+        '404':
+          description: Not Found
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
   /campaigns/{campaign_id}/sequence:
     get:
       summary: Get campaign sequence

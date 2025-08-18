@@ -216,12 +216,69 @@ paths:
   /campaigns/{campaign_id}/sequence:
     get:
       summary: Get campaign sequence
+      parameters:
+        - in: path
+          name: campaign_id
+          required: true
+          schema: { type: string }
       responses:
-        '200': { description: OK }
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  campaign_id: { type: string }
+                  sequence:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        step_order: { type: integer, nullable: true }
+                        action_type: { type: string, enum: [connection_request, message] }
+                        message: { type: string }
+                        delay_hours: { type: integer, nullable: true }
+                        delay_working_days: { type: integer, nullable: true }
+                        name: { type: string, nullable: true }
+                  has_sequence: { type: boolean }
     put:
       summary: Update campaign sequence
+      parameters:
+        - in: path
+          name: campaign_id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [sequence]
+              properties:
+                sequence:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      step_order: { type: integer, nullable: true }
+                      action_type: { type: string, enum: [connection_request, message] }
+                      message: { type: string }
+                      delay_hours: { type: integer, nullable: true }
+                      delay_working_days: { type: integer, nullable: true }
+                      name: { type: string, nullable: true }
       responses:
-        '200': { description: OK }
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+                  campaign:
+                    $ref: '#/components/schemas/Campaign'
   /campaigns/{campaign_id}/analytics/summary:
     get:
       summary: Campaign summary analytics
@@ -271,11 +328,43 @@ paths:
           name: limit
           schema: { type: integer, minimum: 1, maximum: 200 }
       responses:
-        '200': { description: OK }
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/Lead' }
+                  next_cursor: { type: string, nullable: true }
     post:
       summary: Create lead in a campaign
+      parameters:
+        - in: path
+          name: campaign_id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                first_name: { type: string, nullable: true }
+                last_name: { type: string, nullable: true }
+                public_identifier: { type: string, nullable: true }
+                provider_id: { type: string, nullable: true }
+                company_name: { type: string, nullable: true }
       responses:
-        '201': { description: Created }
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Lead'
   /automation/scheduler/status:
     get:
       summary: Scheduler status

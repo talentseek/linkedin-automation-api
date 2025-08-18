@@ -101,6 +101,49 @@ class NotificationService:
             logger.error(f"Error sending connection notification: {str(e)}")
             return False
     
+    def send_notification(self, subject: str, message: str, to_email: str = None) -> bool:
+        """Send a simple notification email."""
+        if not self.enabled:
+            logger.info("Notifications disabled - skipping notification")
+            return False
+        
+        try:
+            # Use provided email or default to configured emails
+            target_emails = [to_email] if to_email else self.to_emails
+            
+            success_count = 0
+            for email in target_emails:
+                email = email.strip()
+                if email:
+                    try:
+                        html_content = f"""
+                        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                            <h2>{subject}</h2>
+                            <p>{message}</p>
+                            <hr>
+                            <p style="color: #666; font-size: 12px;">
+                                Sent from LinkedIn Automation API at {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')}
+                            </p>
+                        </div>
+                        """
+                        
+                        response = resend.Emails.send({
+                            "from": self.from_email,
+                            "to": email,
+                            "subject": subject,
+                            "html": html_content
+                        })
+                        logger.info(f"Notification sent to {email}: {response.get('id')}")
+                        success_count += 1
+                    except Exception as e:
+                        logger.error(f"Failed to send notification to {email}: {str(e)}")
+            
+            return success_count > 0
+            
+        except Exception as e:
+            logger.error(f"Error sending notification: {str(e)}")
+            return False
+
     def send_error_notification(self, error_type: str, error_message: str, context: Dict[str, Any] = None) -> bool:
         """Send notification for system errors."""
         if not self.enabled:

@@ -91,7 +91,9 @@ def _send_connection_request(self, lead: Lead, linkedin_account, message: str) -
                 message=message
             )
             
-            if result.get('success'):
+            # Check if invitation was sent successfully
+            # Unipile returns {"object": "UserInvitationSent", "invitation_id": "..."} on success
+            if result.get('object') == 'UserInvitationSent' and result.get('invitation_id'):
                 # Update lead status
                 lead.status = 'invite_sent'
                 lead.invite_sent_at = datetime.utcnow()

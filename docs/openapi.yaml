@@ -197,6 +197,114 @@ paths:
           schema: { type: string }
       responses:
         '200': { description: OK }
+  /campaigns/{campaign_id}/leads:
+    get:
+      summary: List leads for a campaign
+      parameters:
+        - in: path
+          name: campaign_id
+          required: true
+          schema: { type: string }
+        - in: query
+          name: cursor
+          schema: { type: string }
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 200 }
+      responses:
+        '200': { description: OK }
+    post:
+      summary: Create lead in a campaign
+      responses:
+        '201': { description: Created }
+  /automation/scheduler/status:
+    get:
+      summary: Scheduler status
+      responses:
+        '200': { description: OK }
+  /automation/scheduler/start:
+    post:
+      summary: Start scheduler
+      responses:
+        '200': { description: OK }
+  /automation/scheduler/stop:
+    post:
+      summary: Stop scheduler
+      responses:
+        '200': { description: OK }
+  /analytics/real-time/activity:
+    get:
+      summary: Real-time activity
+      parameters:
+        - in: query
+          name: hours
+          schema: { type: integer, default: 24 }
+        - in: query
+          name: limit
+          schema: { type: integer, default: 50 }
+      responses:
+        '200': { description: OK }
+  /analytics/clients/{client_id}/comparative:
+    get:
+      summary: Comparative analytics for client
+      parameters:
+        - in: path
+          name: client_id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+  /analytics/campaigns/{campaign_id}/export/csv:
+    get:
+      summary: Export campaign analytics as CSV
+      parameters:
+        - in: path
+          name: campaign_id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+  /linkedin-accounts:
+    get:
+      summary: List LinkedIn accounts
+      parameters:
+        - in: query
+          name: client_id
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+    post:
+      summary: Create LinkedIn account
+      responses:
+        '201': { description: Created }
+  /linkedin-accounts/{account_id}:
+    get:
+      summary: Get LinkedIn account
+      parameters:
+        - in: path
+          name: account_id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+    put:
+      summary: Update LinkedIn account
+      responses:
+        '200': { description: OK }
+    delete:
+      summary: Delete LinkedIn account
+      responses:
+        '204': { description: No Content }
+  /webhooks/status:
+    get:
+      summary: Webhooks status snapshot
+      responses:
+        '200': { description: OK }
+  /webhooks/health:
+    get:
+      summary: Webhook health check
+      responses:
+        '200': { description: OK }
   /webhooks/unipile/users:
     post:
       summary: Unipile users webhook

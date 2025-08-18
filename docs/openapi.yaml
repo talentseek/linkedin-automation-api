@@ -23,70 +23,186 @@ components:
       type: object
       required: [code, message]
       properties:
-        code: { type: string }
-        message: { type: string }
+        code: { type: string, example: "VALIDATION_ERROR" }
+        message: { type: string, example: "Invalid request data" }
         details:
           type: object
           additionalProperties: true
+          description: Additional error context
     Client:
       type: object
+      required: [id, name, created_at]
       properties:
-        id: { type: string }
-        name: { type: string }
-        email: { type: string, nullable: true }
-        created_at: { type: string, format: date-time }
+        id: { type: string, format: uuid, example: "8611f25b-15e5-44d2-9973-d644bf632517" }
+        name: { type: string, example: "Michael Beckett" }
+        email: { type: string, format: email, nullable: true, example: "michael@costperdemo.com" }
+        created_at: { type: string, format: date-time, example: "2025-08-11T19:58:41.952691" }
     Campaign:
       type: object
+      required: [id, client_id, name, status, created_at]
       properties:
-        id: { type: string }
-        client_id: { type: string }
-        name: { type: string }
-        status: { type: string, enum: [draft, active, paused, completed] }
-        timezone: { type: string, nullable: true }
+        id: { type: string, format: uuid, example: "54509fce-3c25-44d1-84b5-9f83e68a4191" }
+        client_id: { type: string, format: uuid, example: "8611f25b-15e5-44d2-9973-d644bf632517" }
+        name: { type: string, example: "Test Sales Director Search" }
+        status: { type: string, enum: [draft, active, paused, completed], example: "active" }
+        timezone: { type: string, nullable: true, example: "America/New_York" }
         sequence_json:
           type: array
-          items: { type: object }
-        created_at: { type: string, format: date-time }
+          items: { $ref: '#/components/schemas/SequenceStep' }
+          description: Campaign sequence steps
+        created_at: { type: string, format: date-time, example: "2025-08-11T20:02:14.596457" }
     Lead:
       type: object
+      required: [id, campaign_id, status, created_at]
       properties:
-        id: { type: string }
-        campaign_id: { type: string }
-        first_name: { type: string, nullable: true }
-        last_name: { type: string, nullable: true }
-        public_identifier: { type: string, nullable: true }
+        id: { type: string, format: uuid, example: "a803613e-913d-4d95-b2c8-d1378ed3b7e8" }
+        campaign_id: { type: string, format: uuid, example: "54509fce-3c25-44d1-84b5-9f83e68a4191" }
+        first_name: { type: string, nullable: true, example: "Tope" }
+        last_name: { type: string, nullable: true, example: "Allison" }
+        public_identifier: { type: string, nullable: true, example: "tope-allison" }
         provider_id: { type: string, nullable: true }
-        status: { type: string }
-        current_step: { type: integer, nullable: true }
+        company_name: { type: string, nullable: true, example: "Aspiring SDR/BDR" }
+        status: { type: string, enum: [pending_invite, invite_sent, connected, responded, messaged, completed, error], example: "connected" }
+        current_step: { type: integer, nullable: true, example: 1 }
         conversation_id: { type: string, nullable: true }
-        created_at: { type: string, format: date-time }
+        last_step_sent_at: { type: string, format: date-time, nullable: true }
+        created_at: { type: string, format: date-time, example: "2025-08-11T20:47:58.379525" }
     LinkedInAccount:
       type: object
+      required: [id, account_id, client_id, status]
       properties:
-        account_id: { type: string }
-        client_id: { type: string }
-        status: { type: string }
+        id: { type: string, format: uuid, example: "account-uuid" }
+        account_id: { type: string, example: "DQ50O3PMTKW-HDjVfPveqg" }
+        client_id: { type: string, format: uuid, example: "8611f25b-15e5-44d2-9973-d644bf632517" }
+        status: { type: string, enum: [connected, disconnected, error], example: "connected" }
+        email: { type: string, format: email, nullable: true }
+        created_at: { type: string, format: date-time }
     Event:
       type: object
+      required: [id, lead_id, event_type, timestamp]
       properties:
-        id: { type: string }
-        lead_id: { type: string }
-        event_type: { type: string }
-        timestamp: { type: string, format: date-time }
+        id: { type: string, format: uuid, example: "a5b6f10b-64bf-4808-9e3b-4abedfe26310" }
+        lead_id: { type: string, format: uuid, example: "2889cbd5-4548-4d86-be6c-56493b4c7147" }
+        event_type: { type: string, enum: [connection_accepted, message_received, message_sent, invite_sent], example: "connection_accepted" }
+        timestamp: { type: string, format: date-time, example: "2025-08-14T23:56:27.158455" }
+        metadata: { type: object, additionalProperties: true, nullable: true }
+    SequenceStep:
+      type: object
+      required: [step_order, action_type, message]
+      properties:
+        step_order: { type: integer, minimum: 1, example: 1 }
+        action_type: { type: string, enum: [connection_request, message], example: "connection_request" }
+        message: { type: string, example: "Hi {{first_name}}, I work with distributors to automate order processing. Would love to connect and share insights!" }
+        delay_hours: { type: integer, minimum: 0, default: 0, example: 24 }
+        delay_working_days: { type: integer, minimum: 0, default: 0, example: 3 }
+        name: { type: string, nullable: true, example: "Connection Request" }
     AuthTokens:
       type: object
       required: [access_token, token_type, expires_in]
       properties:
-        access_token: { type: string }
-        refresh_token: { type: string, nullable: true }
-        token_type: { type: string, example: Bearer }
-        expires_in: { type: integer, description: Seconds until access token expiry }
+        access_token: { type: string, example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." }
+        refresh_token: { type: string, nullable: true, example: "refresh_token_here" }
+        token_type: { type: string, example: "Bearer" }
+        expires_in: { type: integer, description: "Seconds until access token expiry", example: 3600 }
     User:
       type: object
+      required: [id, email]
       properties:
-        id: { type: string }
-        email: { type: string }
-        name: { type: string, nullable: true }
+        id: { type: string, format: uuid, example: "user-uuid" }
+        email: { type: string, format: email, example: "user@example.com" }
+        name: { type: string, nullable: true, example: "John Doe" }
+        is_admin: { type: boolean, default: false, example: false }
+        created_at: { type: string, format: date-time }
+    CampaignStatusResponse:
+      type: object
+      required: [campaign_id, campaign_name, status]
+      properties:
+        campaign_id: { type: string, format: uuid, example: "54509fce-3c25-44d1-84b5-9f83e68a4191" }
+        campaign_name: { type: string, example: "Test Sales Director Search" }
+        status: { type: string, enum: [draft, active, paused, completed], example: "active" }
+        created_at: { type: string, format: date-time, nullable: true }
+        statistics:
+          type: object
+          properties:
+            total_leads: { type: integer, example: 120 }
+            status_breakdown:
+              type: object
+              additionalProperties: { type: integer }
+              example:
+                connected: 45
+                pending_invite: 30
+                invite_sent: 25
+                completed: 20
+        recent_events:
+          type: array
+          items: { $ref: '#/components/schemas/Event' }
+        linkedin_account:
+          type: object
+          properties:
+            account_id: { type: string, nullable: true, example: "DQ50O3PMTKW-HDjVfPveqg" }
+            status: { type: string, nullable: true, example: "connected" }
+        rate_limit_status:
+          type: object
+          nullable: true
+          properties:
+            linkedin_account_id: { type: string, example: "DQ50O3PMTKW-HDjVfPveqg" }
+            date: { type: string, format: date, example: "2025-08-18" }
+            invites_sent: { type: integer, example: 0 }
+            messages_sent: { type: integer, example: 0 }
+            limits:
+              type: object
+              properties:
+                max_connections_per_day: { type: integer, example: 25 }
+                max_messages_per_day: { type: integer, example: 100 }
+            remaining:
+              type: object
+              properties:
+                invites: { type: integer, example: 25 }
+                messages: { type: integer, example: 100 }
+    SchedulerStatusResponse:
+      type: object
+      required: [running, thread_alive]
+      properties:
+        running: { type: boolean, example: true }
+        thread_alive: { type: boolean, example: true }
+        last_reset_date: { type: string, format: date, example: "2025-08-18" }
+        working_hours_start: { type: integer, minimum: 0, maximum: 23, example: 9 }
+        working_hours_end: { type: integer, minimum: 0, maximum: 23, example: 17 }
+        min_delay_between_actions: { type: integer, example: 300 }
+        max_delay_between_actions: { type: integer, example: 1800 }
+        max_connections_per_day: { type: integer, example: 25 }
+        max_messages_per_day: { type: integer, example: 100 }
+        nightly_hour_utc: { type: integer, minimum: 0, maximum: 23, example: 1 }
+    WebhookHealthResponse:
+      type: object
+      required: [status, database, message]
+      properties:
+        status: { type: string, enum: [healthy, unhealthy], example: "healthy" }
+        database: { type: string, enum: [connected, disconnected], example: "connected" }
+        message: { type: string, example: "Webhook system is operational" }
+        timestamp: { type: string, format: date-time, example: "2025-08-18T10:02:05.782856" }
+        recent_webhooks_24h: { type: integer, example: 0 }
+    SearchParametersResponse:
+      type: object
+      required: [search_parameters]
+      properties:
+        search_parameters:
+          type: object
+          properties:
+            keywords: { type: array, items: { type: string }, example: ["Sales Director", "VP Sales"] }
+            locations: { type: array, items: { type: object } }
+            industries: { type: array, items: { type: object } }
+            company_sizes: { type: array, items: { type: string }, example: ["51-200", "201-500"] }
+            seniority_levels: { type: array, items: { type: string }, example: ["Senior", "Director"] }
+            function_types: { type: array, items: { type: string }, example: ["Sales", "Marketing"] }
+            connection_degrees: { type: array, items: { type: string }, example: ["1st", "2nd"] }
+    TimezoneResponse:
+      type: object
+      required: [common_timezones, all_timezones, total_count]
+      properties:
+        common_timezones: { type: array, items: { type: string }, example: ["UTC", "America/New_York"] }
+        all_timezones: { type: array, items: { type: string } }
+        total_count: { type: integer, example: 600 }
   responses:
     ErrorResponse:
       description: Error
@@ -149,122 +265,165 @@ paths:
   /clients:
     get:
       summary: List clients
+      description: Retrieve all clients with optional campaign inclusion
       parameters:
+        - in: query
+          name: include_campaigns
+          schema: { type: boolean, default: false }
+          description: Include campaign data for each client
         - in: query
           name: cursor
           schema: { type: string }
+          description: Pagination cursor
         - in: query
           name: limit
-          schema: { type: integer, minimum: 1, maximum: 200 }
+          schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+          description: Number of clients to return
       responses:
         '200':
-          description: OK
+          description: List of clients
           content:
             application/json:
               schema:
                 type: object
                 properties:
-                  items:
+                  clients:
                     type: array
                     items: { $ref: '#/components/schemas/Client' }
                   next_cursor: { type: string, nullable: true }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+        '500': { $ref: '#/components/responses/ErrorResponse' }
     post:
       summary: Create client
+      description: Create a new client
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string, example: "New Client" }
+                email: { type: string, format: email, nullable: true, example: "client@example.com" }
       responses:
-        '201': { description: Created }
-  /campaigns:
-    get:
-      summary: List campaigns
-      parameters:
-        - in: query
-          name: client_id
-          schema: { type: string }
-        - in: query
-          name: cursor
-          schema: { type: string }
-        - in: query
-          name: limit
-          schema: { type: integer, minimum: 1, maximum: 200 }
-      responses:
-        '200': { description: OK }
-    post:
-      summary: Create campaign
-      responses:
-        '201': { description: Created }
-  /campaigns/{campaign_id}:
-    get:
-      summary: Get campaign
-      parameters:
-        - in: path
-          name: campaign_id
-          required: true
-          schema: { type: string }
-      responses:
-        '200': { description: OK }
-  /campaigns/{campaign_id}/status:
-    get:
-      summary: Campaign status and rate limits
-      parameters:
-        - in: path
-          name: campaign_id
-          required: true
-          schema: { type: string }
-      responses:
-        '200':
-          description: OK
+        '201':
+          description: Client created successfully
           content:
             application/json:
               schema:
                 type: object
                 properties:
-                  campaign_id: { type: string }
-                  campaign_name: { type: string }
-                  status: { type: string }
-                  created_at: { type: string, format: date-time, nullable: true }
-                  statistics:
-                    type: object
-                    properties:
-                      total_leads: { type: integer }
-                      status_breakdown:
-                        type: object
-                        additionalProperties: { type: integer }
-                  recent_events:
-                    type: array
-                    items:
-                      type: object
-                      properties:
-                        id: { type: string }
-                        event_type: { type: string }
-                        timestamp: { type: string, format: date-time }
-                        lead_id: { type: string, nullable: true }
-                  linkedin_account:
-                    type: object
-                    properties:
-                      account_id: { type: string, nullable: true }
-                      status: { type: string, nullable: true }
-                  rate_limit_status:
-                    type: object
-                    nullable: true
-                    properties:
-                      linkedin_account_id: { type: string }
-                      date: { type: string }
-                      invites_sent: { type: integer }
-                      messages_sent: { type: integer }
-                      limits:
-                        type: object
-                        properties:
-                          max_connections_per_day: { type: integer }
-                          max_messages_per_day: { type: integer }
-                      remaining:
-                        type: object
-                        properties:
-                          invites: { type: integer }
-                          messages: { type: integer }
-        '404':
-          description: Not Found
+                  message: { type: string, example: "Client created successfully" }
+                  client: { $ref: '#/components/schemas/Client' }
+        '400': { $ref: '#/components/responses/ErrorResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+        '500': { $ref: '#/components/responses/ErrorResponse' }
+  /campaigns:
+    get:
+      summary: List campaigns
+      description: Retrieve all campaigns, optionally filtered by client_id
+      parameters:
+        - in: query
+          name: client_id
+          schema: { type: string, format: uuid }
+          description: Filter campaigns by client ID
+        - in: query
+          name: cursor
+          schema: { type: string }
+          description: Pagination cursor
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+          description: Number of campaigns to return
+      responses:
+        '200':
+          description: List of campaigns
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/Error' }
+              schema:
+                type: object
+                properties:
+                  campaigns:
+                    type: array
+                    items: { $ref: '#/components/schemas/Campaign' }
+        '400': { $ref: '#/components/responses/ErrorResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+        '500': { $ref: '#/components/responses/ErrorResponse' }
+    post:
+      summary: Create campaign
+      description: Create a new campaign for a client
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [client_id, name]
+              properties:
+                client_id: { type: string, format: uuid, example: "8611f25b-15e5-44d2-9973-d644bf632517" }
+                name: { type: string, example: "Q1 Outreach Campaign" }
+                timezone: { type: string, nullable: true, example: "America/New_York" }
+                status: { type: string, enum: [draft, active, paused, completed], default: "draft" }
+                sequence_json:
+                  type: array
+                  items: { $ref: '#/components/schemas/SequenceStep' }
+                  nullable: true
+      responses:
+        '201':
+          description: Campaign created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string, example: "Campaign created successfully" }
+                  campaign: { $ref: '#/components/schemas/Campaign' }
+        '400': { $ref: '#/components/responses/ErrorResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+        '500': { $ref: '#/components/responses/ErrorResponse' }
+  /campaigns/{campaign_id}:
+    get:
+      summary: Get campaign
+      description: Retrieve details of a specific campaign
+      parameters:
+        - in: path
+          name: campaign_id
+          required: true
+          schema: { type: string, format: uuid }
+          description: Campaign ID
+      responses:
+        '200':
+          description: Campaign details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  campaign: { $ref: '#/components/schemas/Campaign' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+        '500': { $ref: '#/components/responses/ErrorResponse' }
+  /campaigns/{campaign_id}/status:
+    get:
+      summary: Campaign status and rate limits
+      description: Get comprehensive status information for a campaign including statistics, events, and rate limits
+      parameters:
+        - in: path
+          name: campaign_id
+          required: true
+          schema: { type: string, format: uuid }
+          description: Campaign ID
+      responses:
+        '200':
+          description: Campaign status information
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CampaignStatusResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+        '500': { $ref: '#/components/responses/ErrorResponse' }
   /campaigns/{campaign_id}/sequence:
     get:
       summary: Get campaign sequence
@@ -358,13 +517,37 @@ paths:
   /leads/{lead_id}:
     get:
       summary: Get lead
+      description: Retrieve details of a specific lead
       parameters:
         - in: path
           name: lead_id
           required: true
-          schema: { type: string }
+          schema: { type: string, format: uuid }
+          description: Lead ID
       responses:
-        '200': { description: OK }
+        '200':
+          description: Lead details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  lead: { $ref: '#/components/schemas/Lead' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+        '500': { $ref: '#/components/responses/ErrorResponse' }
+  /leads/search-parameters:
+    get:
+      summary: Get available search parameters for LinkedIn Sales Navigator
+      description: Retrieve available search parameters for building LinkedIn Sales Navigator searches
+      responses:
+        '200':
+          description: Available search parameters
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SearchParametersResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+        '500': { $ref: '#/components/responses/ErrorResponse' }
   /campaigns/{campaign_id}/leads:
     get:
       summary: List leads for a campaign
@@ -420,18 +603,44 @@ paths:
   /automation/scheduler/status:
     get:
       summary: Scheduler status
+      description: Get the current status of the automation scheduler
       responses:
-        '200': { description: OK }
+        '200':
+          description: Scheduler status information
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SchedulerStatusResponse' }
+        '500': { $ref: '#/components/responses/ErrorResponse' }
   /automation/scheduler/start:
     post:
       summary: Start scheduler
+      description: Start the automation scheduler
       responses:
-        '200': { description: OK }
+        '200':
+          description: Scheduler started successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string, example: "Scheduler started successfully" }
+                  status: { type: string, example: "running" }
+        '500': { $ref: '#/components/responses/ErrorResponse' }
   /automation/scheduler/stop:
     post:
       summary: Stop scheduler
+      description: Stop the automation scheduler
       responses:
-        '200': { description: OK }
+        '200':
+          description: Scheduler stopped successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string, example: "Scheduler stopped successfully" }
+                  status: { type: string, example: "stopped" }
+        '500': { $ref: '#/components/responses/ErrorResponse' }
   /analytics/real-time/activity:
     get:
       summary: Real-time activity
@@ -516,8 +725,14 @@ paths:
   /webhooks/webhook/health:
     get:
       summary: Webhook health check
+      description: Check the health status of the webhook system
       responses:
-        '200': { description: OK }
+        '200':
+          description: Webhook system health status
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WebhookHealthResponse' }
+        '500': { $ref: '#/components/responses/ErrorResponse' }
   /webhooks/unipile/users:
     post:
       summary: Unipile users webhook
@@ -575,8 +790,14 @@ paths:
   /sequence/timezones:
     get:
       summary: List timezones (helper)
+      description: Get a list of available timezones for campaign configuration
       responses:
-        '200': { description: OK }
+        '200':
+          description: List of available timezones
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TimezoneResponse' }
+        '500': { $ref: '#/components/responses/ErrorResponse' }
   /sequence/validate:
     post:
       summary: Validate a sequence definition (helper)

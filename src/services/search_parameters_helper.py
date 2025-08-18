@@ -71,6 +71,63 @@ class SearchParametersHelper:
             "executive": {"min": 10, "max": 20},
             "cxo": {"min": 15, "max": 30}
         }
+
+    # === Convenience getters used by routes ===
+    def get_keywords(self) -> list[str]:
+        """Return example keyword suggestions."""
+        return [
+            "Sales Director",
+            "VP Sales",
+            "Head of Sales",
+            "Software Engineer",
+            "Full Stack Developer",
+            "CFO",
+            "COO",
+            "CTO",
+        ]
+
+    def get_locations(self) -> list[str]:
+        """Return common human-readable locations supported by helper."""
+        return sorted(set(self.COMMON_LOCATIONS.keys()))
+
+    def get_industries(self) -> list[str]:
+        """Return common industry names supported by helper."""
+        return sorted(set(self.COMMON_INDUSTRIES.keys()))
+
+    def get_company_sizes(self) -> list[str]:
+        """Return standard company size buckets."""
+        return [
+            "1-10",
+            "11-50",
+            "51-200",
+            "201-500",
+            "501-1000",
+            "1001-5000",
+            "5001-10000",
+            "10001+",
+        ]
+
+    def get_seniority_levels(self) -> list[str]:
+        """Return supported seniority level labels."""
+        return list(self.SENIORITY_LEVELS.keys())
+
+    def get_function_types(self) -> list[str]:
+        """Return common function/department types."""
+        return [
+            "Sales",
+            "Marketing",
+            "Engineering",
+            "Information Technology",
+            "Operations",
+            "Finance",
+            "Human Resources",
+            "Product",
+            "Customer Success",
+        ]
+
+    def get_connection_degrees(self) -> list[str]:
+        """Return LinkedIn connection degrees."""
+        return ["1st", "2nd", "3rd"]
     
     def build_search(
         self,

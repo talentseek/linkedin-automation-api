@@ -196,8 +196,7 @@ def get_campaign_status(campaign_id):
             'campaign_id': campaign_id,
             'campaign_name': campaign.name,
             'status': campaign.status,
-            'started_at': campaign.started_at.isoformat() if campaign.started_at else None,
-            'paused_at': campaign.paused_at.isoformat() if campaign.paused_at else None,
+            'created_at': campaign.created_at.isoformat() if campaign.created_at else None,
             'statistics': {
                 'total_leads': total_leads,
                 'status_breakdown': status_counts

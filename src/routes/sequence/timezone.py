@@ -87,7 +87,7 @@ def update_campaign_timezone(campaign_id):
         return jsonify({'error': str(e)}), 500
 
 
-@sequence_bp.route('/timezones', methods=['GET'])
+@sequence_bp.route('/sequence/timezones', methods=['GET'])
 # @jwt_required()  # Temporarily removed for development
 def get_available_timezones():
     """Get a list of available timezones."""

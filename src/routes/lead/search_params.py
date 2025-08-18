@@ -16,7 +16,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-@lead_bp.route('/search-parameters', methods=['GET'])
+@lead_bp.route('/leads/search-parameters', methods=['GET'])
 # @jwt_required()  # Temporarily removed for development
 def get_search_parameters():
     """Get available search parameters for LinkedIn Sales Navigator."""
@@ -57,7 +57,7 @@ def get_search_parameters():
         return jsonify({'error': str(e)}), 500
 
 
-@lead_bp.route('/search-parameters/helper', methods=['GET'])
+@lead_bp.route('/leads/search-parameters/helper', methods=['GET'])
 # @jwt_required()  # Temporarily removed for development
 def get_search_parameters_helper():
     """Get search parameters helper with examples and validation."""

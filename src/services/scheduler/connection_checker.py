@@ -32,6 +32,10 @@ def _check_single_account_relations(account_id, unipile):
         # Process each relation
         for relation in relations:
             try:
+                # Check if relation is a dictionary
+                if not isinstance(relation, dict):
+                    logger.warning(f"Invalid relation format (expected dict, got {type(relation)}): {relation}")
+                    continue
                 _process_relation(relation, account_id)
             except Exception as e:
                 logger.error(f"Error processing relation: {str(e)}")

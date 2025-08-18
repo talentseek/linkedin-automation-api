@@ -15,7 +15,6 @@ class Lead(db.Model):
     public_identifier = db.Column(db.String(255), nullable=False)  # LinkedIn public identifier
     provider_id = db.Column(db.String(255), nullable=True)  # Unipile's internal provider ID
     conversation_id = db.Column(db.String(255), nullable=True)  # LinkedIn conversation ID for messaging
-    connection_type = db.Column(db.String(50), nullable=True)  # Connection type: '1st Level', '2nd Level', etc.
     status = db.Column(db.String(50), nullable=False, default='pending_invite')  
     # Status options: pending_invite, invited, connected, responded, completed, error
     last_step_sent_at = db.Column(db.DateTime, nullable=True)
@@ -40,7 +39,6 @@ class Lead(db.Model):
             'company_name': self.company_name,
             'public_identifier': self.public_identifier,
             'provider_id': self.provider_id,
-            'connection_type': self.connection_type,
             'status': self.status,
             'last_step_sent_at': self.last_step_sent_at.isoformat() if self.last_step_sent_at else None,
             'current_step': self.current_step,

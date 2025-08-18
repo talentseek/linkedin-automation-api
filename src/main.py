@@ -52,6 +52,10 @@ def create_app(config_name=None):
         from src.routes.auth import auth_bp
         app.register_blueprint(auth_bp, url_prefix='/api/auth')
         app.logger.info("Registered auth blueprint")
+    except ImportError as e:
+        app.logger.error(f"Import error for auth blueprint: {str(e)}")
+        import traceback
+        app.logger.error(f"Auth blueprint import error traceback: {traceback.format_exc()}")
     except Exception as e:
         app.logger.error(f"Failed to register auth blueprint: {str(e)}")
         import traceback
@@ -170,14 +174,10 @@ def create_app(config_name=None):
     
 
     
-    # Serve static files - moved to end to avoid overriding API routes
+    # Simple health check endpoint
     @app.route('/')
     def index():
-        return send_from_directory('static', 'index.html')
-    
-    @app.route('/static/<path:filename>')
-    def static_files(filename):
-        return send_from_directory('static', filename)
+        return jsonify({'status': 'ok', 'message': 'LinkedIn Automation API is running'})
     
     return app
 

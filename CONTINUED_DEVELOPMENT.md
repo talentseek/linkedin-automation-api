@@ -91,21 +91,52 @@ This document tracks next steps, new endpoints to add, audit findings, and recom
   - [ ] Improve code documentation
   - [ ] Add type hints
 
-#### **3. OpenAPI & Documentation** 🔄 **MEDIUM PRIORITY**
-**Status**: Ready to implement comprehensive API documentation
-**Goal**: Professional API documentation and developer experience
+#### **3. API Surface Audit & OpenAPI-first** 🔄 **HIGH PRIORITY**
+**Status**: Begin with a full route inventory; document first, refactor where needed
+**Goal**: Lock down a minimal, consistent, versioned API surface and document it in OpenAPI; use spec to drive targeted refactors
 
 **Tasks:**
-- [ ] **OpenAPI 3.0 Specification**
-  - [ ] Create comprehensive OpenAPI spec for all endpoints
-  - [ ] Add request/response schemas and examples
-  - [ ] Define error response schemas
-  - [ ] Add JWT bearer security scheme
-- [ ] **Swagger UI Implementation**
-  - [ ] Serve OpenAPI spec at `/openapi.json`
-  - [ ] Add Swagger UI at `/docs`
-  - [ ] Add interactive API testing
-  - [ ] Add API versioning support
+- [ ] Route Inventory & Classification
+  - [ ] Generate a route map of all blueprints and paths
+  - [ ] Classify each endpoint: keep, merge, deprecate, admin-only
+- [ ] Canonicalize API Structure & Conventions
+  - [ ] Versioning: prefix all routes with `/api/v1`
+  - [ ] Auth: JWT bearer; admin scope for admin routes
+  - [ ] Pagination: cursor + limit with `next_cursor`
+  - [ ] Filtering/sorting: `filter[...]`, `sort`, `order`
+  - [ ] Errors: uniform `{ code, message, details }`
+  - [ ] Idempotency: `Idempotency-Key` for mutating endpoints
+  - [ ] Timestamps: ISO 8601 UTC; IDs as strings
+  - [ ] Optional: rate limit headers where relevant
+- [ ] Draft OpenAPI 3.1 Skeleton
+  - [ ] Info, servers, security schemes (JWT bearer)
+  - [ ] Components/schemas: `Client`, `Campaign`, `Lead`, `LinkedInAccount`, `Event`, `RateUsage`, `Error`
+- [ ] Fill Critical Endpoints First
+  - [ ] Campaigns, Leads, Webhooks, Analytics, Automation
+- [ ] Gap Analysis & Minimal Refactors
+  - [ ] List mismatches between code and spec
+  - [ ] Plan minimal edits (rename, move, deprecate)
+- [ ] Swagger UI & Spec Hosting
+  - [ ] Serve spec at `/openapi.json`
+  - [ ] Swagger UI at `/docs` (read-only)
+
+**Proposed Canonical API Surface (subject to audit):**
+- Auth: `/api/v1/auth/login`, `/api/v1/auth/refresh`
+- Clients: `/api/v1/clients`, `/api/v1/clients/{client_id}`
+- LinkedIn Accounts: `/api/v1/linkedin-accounts`, `/api/v1/linkedin-accounts/{id}`
+- Campaigns: `/api/v1/campaigns`, `/api/v1/campaigns/{campaign_id}`
+  - Subresources: `.../status`, `.../sequence`, `.../timezone`, `.../analytics/{summary|timeseries}`
+  - Actions: `.../actions/{start|pause}`
+- Leads: `/api/v1/leads`, `/api/v1/leads/{lead_id}`, `/api/v1/campaigns/{campaign_id}/leads`, exports
+- Automation: `/api/v1/automation/scheduler/status`
+- Webhooks: `/api/v1/webhooks/unipile/{users|messaging}`, `/api/v1/webhooks/health` (admin: register/list/delete/backfill)
+- Analytics: `/api/v1/analytics/real-time`, `/api/v1/analytics/clients/{client_id}/comparative`
+- Admin (JWT+admin scope): migrations, backfills, debug tools
+
+**Deliverables:**
+- [ ] Route inventory (current vs proposed mapping)
+- [ ] OpenAPI 3.1 skeleton committed
+- [ ] Gap list with targeted refactor items
 
 #### **4. Performance Optimization** 🔄 **MEDIUM PRIORITY**
 **Status**: Ready to optimize system performance

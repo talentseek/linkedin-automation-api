@@ -1,0 +1,210 @@
+openapi: 3.1.0
+info:
+  title: LinkedIn Automation API
+  version: 1.0.0
+  description: >-
+    Canonical, versioned API for campaigns, leads, webhooks, analytics, and automation.
+    This spec is drafted OpenAPI-first to drive endpoint normalization and documentation.
+servers:
+  - url: https://linkedin-automation-api.fly.dev/api/v1
+    description: Production
+  - url: http://localhost:5000/api/v1
+    description: Local
+security:
+  - bearerAuth: []
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code: { type: string }
+        message: { type: string }
+        details:
+          type: object
+          additionalProperties: true
+    Client:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        email: { type: string, nullable: true }
+        created_at: { type: string, format: date-time }
+    Campaign:
+      type: object
+      properties:
+        id: { type: string }
+        client_id: { type: string }
+        name: { type: string }
+        status: { type: string, enum: [draft, active, paused, completed] }
+        timezone: { type: string, nullable: true }
+        sequence_json:
+          type: array
+          items: { type: object }
+        created_at: { type: string, format: date-time }
+    Lead:
+      type: object
+      properties:
+        id: { type: string }
+        campaign_id: { type: string }
+        first_name: { type: string, nullable: true }
+        last_name: { type: string, nullable: true }
+        public_identifier: { type: string, nullable: true }
+        provider_id: { type: string, nullable: true }
+        status: { type: string }
+        current_step: { type: integer, nullable: true }
+        conversation_id: { type: string, nullable: true }
+        created_at: { type: string, format: date-time }
+    LinkedInAccount:
+      type: object
+      properties:
+        account_id: { type: string }
+        client_id: { type: string }
+        status: { type: string }
+    Event:
+      type: object
+      properties:
+        id: { type: string }
+        lead_id: { type: string }
+        event_type: { type: string }
+        timestamp: { type: string, format: date-time }
+paths:
+  /auth/login:
+    post:
+      summary: Login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string }
+                password: { type: string }
+      responses:
+        '200': { description: OK }
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+  /clients:
+    get:
+      summary: List clients
+      parameters:
+        - in: query
+          name: cursor
+          schema: { type: string }
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 200 }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/Client' }
+                  next_cursor: { type: string, nullable: true }
+    post:
+      summary: Create client
+      responses:
+        '201': { description: Created }
+  /campaigns:
+    get:
+      summary: List campaigns
+      parameters:
+        - in: query
+          name: client_id
+          schema: { type: string }
+        - in: query
+          name: cursor
+          schema: { type: string }
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 200 }
+      responses:
+        '200': { description: OK }
+    post:
+      summary: Create campaign
+      responses:
+        '201': { description: Created }
+  /campaigns/{campaign_id}:
+    get:
+      summary: Get campaign
+      parameters:
+        - in: path
+          name: campaign_id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+  /campaigns/{campaign_id}/status:
+    get:
+      summary: Campaign status and rate limits
+      responses:
+        '200': { description: OK }
+  /campaigns/{campaign_id}/sequence:
+    get:
+      summary: Get campaign sequence
+      responses:
+        '200': { description: OK }
+    put:
+      summary: Update campaign sequence
+      responses:
+        '200': { description: OK }
+  /campaigns/{campaign_id}/analytics/summary:
+    get:
+      summary: Campaign summary analytics
+      responses:
+        '200': { description: OK }
+  /campaigns/{campaign_id}/analytics/timeseries:
+    get:
+      summary: Campaign time series analytics
+      parameters:
+        - in: query
+          name: days
+          schema: { type: integer, default: 30 }
+      responses:
+        '200': { description: OK }
+  /campaigns/{campaign_id}/actions/start:
+    post:
+      summary: Start campaign
+      responses:
+        '200': { description: OK }
+  /campaigns/{campaign_id}/actions/pause:
+    post:
+      summary: Pause campaign
+      responses:
+        '200': { description: OK }
+  /leads/{lead_id}:
+    get:
+      summary: Get lead
+      parameters:
+        - in: path
+          name: lead_id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+  /webhooks/unipile/users:
+    post:
+      summary: Unipile users webhook
+      responses:
+        '200': { description: OK }
+  /webhooks/unipile/messaging:
+    post:
+      summary: Unipile messaging webhook
+      responses:
+        '200': { description: OK }
+

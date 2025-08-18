@@ -8,6 +8,7 @@ This module contains functionality for:
 """
 
 import logging
+import uuid
 from datetime import datetime, date
 from src.models import db, RateUsage
 from src.models.linkedin_account import LinkedInAccount
@@ -29,6 +30,7 @@ def _get_today_usage_counts(self, provider_account_id: str):
         if not usage:
             # Create new usage record for today
             usage = RateUsage(
+                id=str(uuid.uuid4()),
                 linkedin_account_id=provider_account_id,
                 usage_date=today,
                 invites_sent=0,
@@ -85,6 +87,7 @@ def _increment_usage(self, provider_account_id: str, action_type: str):
         
         if not usage:
             usage = RateUsage(
+                id=str(uuid.uuid4()),
                 linkedin_account_id=provider_account_id,
                 usage_date=today,
                 invites_sent=0,
@@ -118,15 +121,16 @@ def _reset_daily_counters(self):
         for account in accounts:
             # Ensure today's usage record exists
             usage = RateUsage.query.filter_by(
-                provider_account_id=account.account_id,
-                date=today
+                linkedin_account_id=account.account_id,
+                usage_date=today
             ).first()
             
             if not usage:
                 usage = RateUsage(
-                    provider_account_id=account.account_id,
-                    date=today,
-                    connections_sent=0,
+                    id=str(uuid.uuid4()),
+                    linkedin_account_id=account.account_id,
+                    usage_date=today,
+                    invites_sent=0,
                     messages_sent=0
                 )
                 db.session.add(usage)

@@ -9,6 +9,7 @@ from src.utils.error_handling import (
     validate_required_fields,
     handle_exception
 )
+from src.services.caching import cache_response, invalidate_cache_on_change
 import uuid
 
 client_bp = Blueprint('client', __name__)
@@ -16,6 +17,7 @@ client_bp = Blueprint('client', __name__)
 
 @client_bp.route('/clients', methods=['POST'])
 # @jwt_required()  # Temporarily removed for development
+@invalidate_cache_on_change('client', 'client_id')
 def create_client():
     """Create a new client."""
     try:
@@ -48,6 +50,7 @@ def create_client():
 
 @client_bp.route('/clients', methods=['GET'])
 # @jwt_required()  # Temporarily removed for development
+@cache_response('clients:list', ttl=300)
 def get_clients():
     """Get all clients with optional campaign inclusion."""
     try:
@@ -92,6 +95,7 @@ def get_clients():
 
 @client_bp.route('/clients/<client_id>', methods=['GET'])
 # @jwt_required()  # Temporarily removed for development
+@cache_response('clients:detail', ttl=600, key_args=['client_id'])
 def get_client(client_id):
     """Get a specific client by ID."""
     try:
@@ -108,6 +112,7 @@ def get_client(client_id):
 
 @client_bp.route('/clients/<client_id>', methods=['PUT'])
 # @jwt_required()  # Temporarily removed for development
+@invalidate_cache_on_change('client', 'client_id')
 def update_client(client_id):
     """Update a client."""
     try:

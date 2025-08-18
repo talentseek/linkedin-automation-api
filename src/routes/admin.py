@@ -7,6 +7,7 @@ from sqlalchemy import inspect, text, func
 
 from src.extensions import db
 from src.services.scheduler import get_outreach_scheduler
+from src.services.caching import get_cache_service
 from src.models import Lead, Event, Campaign, Client, LinkedInAccount, WebhookData
 
 logger = logging.getLogger(__name__)
@@ -295,5 +296,76 @@ def get_connection_pool_stats():
     except Exception as e:
         logger.error(f"Failed to get connection pool stats: {str(e)}")
         return jsonify({'error': str(e)}), 500
+
+
+# Cache Management Endpoints
+@admin_bp.route("/cache/stats", methods=["GET"])
+# @jwt_required()  # Temporarily removed for development
+def get_cache_stats():
+    """Get Redis cache statistics."""
+    try:
+        cache = get_cache_service()
+        stats = cache.get_cache_stats()
+        return jsonify(stats), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@admin_bp.route("/cache/clear", methods=["POST"])
+# @jwt_required()  # Temporarily removed for development
+def clear_cache():
+    """Clear all cache entries."""
+    try:
+        cache = get_cache_service()
+        # Clear all API cache entries
+        deleted_count = cache.delete_pattern("api:*")
+        return jsonify({
+            "message": f"Cache cleared successfully",
+            "deleted_keys": deleted_count
+        }), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@admin_bp.route("/cache/invalidate/client/<client_id>", methods=["POST"])
+# @jwt_required()  # Temporarily removed for development
+def invalidate_client_cache(client_id):
+    """Invalidate all cache entries for a specific client."""
+    try:
+        cache = get_cache_service()
+        cache.invalidate_client_cache(client_id)
+        return jsonify({
+            "message": f"Cache invalidated for client {client_id}"
+        }), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@admin_bp.route("/cache/invalidate/campaign/<campaign_id>", methods=["POST"])
+# @jwt_required()  # Temporarily removed for development
+def invalidate_campaign_cache(campaign_id):
+    """Invalidate all cache entries for a specific campaign."""
+    try:
+        cache = get_cache_service()
+        cache.invalidate_campaign_cache(campaign_id)
+        return jsonify({
+            "message": f"Cache invalidated for campaign {campaign_id}"
+        }), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@admin_bp.route("/cache/invalidate/lead/<lead_id>", methods=["POST"])
+# @jwt_required()  # Temporarily removed for development
+def invalidate_lead_cache(lead_id):
+    """Invalidate all cache entries for a specific lead."""
+    try:
+        cache = get_cache_service()
+        cache.invalidate_lead_cache(lead_id)
+        return jsonify({
+            "message": f"Cache invalidated for lead {lead_id}"
+        }), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 

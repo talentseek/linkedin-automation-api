@@ -28,6 +28,9 @@ class Config:
     LOG_LEVEL = os.environ.get('LOG_LEVEL', 'INFO')
     # Debug endpoints toggle
     DEBUG_ENDPOINTS_ENABLED = os.environ.get('DEBUG_ENDPOINTS_ENABLED', 'false').lower() == 'true'
+    
+    # Redis configuration
+    REDIS_URL = os.environ.get('REDIS_URL', 'redis://localhost:6379/0')
 
     # Notifications (Resend Email)
     NOTIFICATIONS_ENABLED = os.environ.get('NOTIFICATIONS_ENABLED', 'false').lower() == 'true'

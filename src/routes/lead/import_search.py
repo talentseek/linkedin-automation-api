@@ -205,7 +205,7 @@ def import_leads_from_url(campaign_id):
         
         # Use Unipile API to search for profiles from URL
         unipile = UnipileClient()
-        search_results = unipile.search_linkedin_profiles_from_url(
+        search_results = unipile.search_linkedin_from_url(
             account_id=linkedin_account.account_id,
             url=data['url']
         )

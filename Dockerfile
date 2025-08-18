@@ -20,8 +20,9 @@ RUN apt-get update \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy project
+# Copy project (including docs for OpenAPI)
 COPY . .
+RUN test -f /app/docs/openapi.yaml || (echo "Missing docs/openapi.yaml in image" && exit 1)
 
 # Create necessary directories
 RUN mkdir -p logs instance

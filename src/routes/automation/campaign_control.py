@@ -24,6 +24,44 @@ logger = logging.getLogger(__name__)
 from . import automation_bp
 
 
+def _validate_campaign_automation(campaign_id):
+    """Validate that a campaign can be automated."""
+    try:
+        # Get campaign
+        campaign = Campaign.query.get(campaign_id)
+        if not campaign:
+            return {'valid': False, 'error': 'Campaign not found'}
+        
+        # Check if campaign has a LinkedIn account
+        linkedin_account = LinkedInAccount.query.filter_by(
+            client_id=campaign.client_id,
+            status='connected'
+        ).first()
+        
+        if not linkedin_account:
+            return {'valid': False, 'error': 'No connected LinkedIn account for this campaign'}
+        
+        # Check if campaign has a sequence
+        if not campaign.sequence_json:
+            return {'valid': False, 'error': 'Campaign has no sequence defined'}
+        
+        # Check if campaign has leads
+        lead_count = Lead.query.filter_by(campaign_id=campaign_id).count()
+        if lead_count == 0:
+            return {'valid': False, 'error': 'Campaign has no leads'}
+        
+        return {
+            'valid': True,
+            'campaign': campaign,
+            'linkedin_account': linkedin_account,
+            'lead_count': lead_count
+        }
+        
+    except Exception as e:
+        logger.error(f"Error validating campaign automation: {str(e)}")
+        return {'valid': False, 'error': str(e)}
+
+
 def _get_rate_limit_status(linkedin_account_id: str) -> dict:
     """Compute today's rate limit usage and remaining quotas for a LinkedIn account.
 

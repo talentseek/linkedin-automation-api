@@ -54,10 +54,10 @@ instance/
 .env.local
 .env.production
 
-# Documentation
+# Documentation (keep docs folder for OpenAPI)
 README.md
 *.md
-docs/
+# keep: docs/
 
 # Development files
 tests/

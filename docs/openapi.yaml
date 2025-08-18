@@ -73,6 +73,26 @@ components:
         lead_id: { type: string }
         event_type: { type: string }
         timestamp: { type: string, format: date-time }
+    AuthTokens:
+      type: object
+      required: [access_token, token_type, expires_in]
+      properties:
+        access_token: { type: string }
+        refresh_token: { type: string, nullable: true }
+        token_type: { type: string, example: Bearer }
+        expires_in: { type: integer, description: Seconds until access token expiry }
+    User:
+      type: object
+      properties:
+        id: { type: string }
+        email: { type: string }
+        name: { type: string, nullable: true }
+  responses:
+    ErrorResponse:
+      description: Error
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
 paths:
   /auth/login:
     post:
@@ -88,12 +108,44 @@ paths:
                 email: { type: string }
                 password: { type: string }
       responses:
-        '200': { description: OK }
-        '401':
-          description: Unauthorized
+        '200':
+          description: OK
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/Error' }
+              schema:
+                type: object
+                properties:
+                  tokens: { $ref: '#/components/schemas/AuthTokens' }
+                  user: { $ref: '#/components/schemas/User' }
+        '400': { $ref: '#/components/responses/ErrorResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+  /auth/refresh:
+    post:
+      summary: Refresh access token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                refresh_token: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tokens:
+                    type: object
+                    properties:
+                      access_token: { type: string }
+                      token_type: { type: string, example: Bearer }
+                      expires_in: { type: integer }
+        '400': { $ref: '#/components/responses/ErrorResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
   /clients:
     get:
       summary: List clients

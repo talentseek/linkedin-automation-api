@@ -97,10 +97,10 @@ class NotificationService:
             
             return success_count > 0
             
-        except Exception as e:
+                except Exception as e:
             logger.error(f"Error sending connection notification: {str(e)}")
             return False
-    
+
     def send_notification(self, subject: str, message: str, to_email: str = None) -> bool:
         """Send a simple notification email."""
         if not self.enabled:

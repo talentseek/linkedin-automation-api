@@ -17,6 +17,8 @@ import pytz
 from src.extensions import db
 from src.models import Lead, Campaign, Event
 from src.services.unipile_client import UnipileClient
+from .action_executor import _send_connection_request, _send_message
+from .message_formatter import _format_message
 
 logger = logging.getLogger(__name__)
 
@@ -100,13 +102,13 @@ class SequenceEngine:
             logger.info(f"=== END EXECUTE STEP DEBUG ===")
             
             # Format message with lead data
-            formatted_message = self._format_message(message, lead)
+            formatted_message = _format_message(self, message, lead)
             
             # Execute based on action type
             if action_type == 'connection_request':
-                result = self._send_connection_request(lead, linkedin_account, formatted_message)
+                result = _send_connection_request(self, lead, linkedin_account, formatted_message)
             elif action_type == 'message':
-                result = self._send_message(lead, linkedin_account, formatted_message)
+                result = _send_message(self, lead, linkedin_account, formatted_message)
             else:
                 logger.error(f"Unknown action type: {action_type}")
                 return {'success': False, 'error': f'Unknown action type: {action_type}'}

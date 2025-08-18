@@ -299,7 +299,9 @@ class TestRateUsage:
     
     def test_create_rate_usage(self, db_session):
         """Test creating a rate usage record."""
+        import uuid
         usage = RateUsage(
+            id=str(uuid.uuid4()),
             linkedin_account_id="test-account-123",
             usage_date=date.today(),
             invites_sent=5,
@@ -316,10 +318,12 @@ class TestRateUsage:
     
     def test_rate_usage_unique_constraint(self, db_session):
         """Test unique constraint on linkedin_account_id + usage_date."""
+        import uuid
         today = date.today()
         
         # Create first record
         usage1 = RateUsage(
+            id=str(uuid.uuid4()),
             linkedin_account_id="test-account-123",
             usage_date=today,
             invites_sent=5,

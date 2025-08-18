@@ -14,6 +14,13 @@ from flask_jwt_extended import jwt_required
 from sqlalchemy.exc import IntegrityError
 from src.models import db, Lead, Campaign
 from src.routes.lead import lead_bp
+from src.utils.error_handling import (
+    handle_validation_error,
+    handle_database_error,
+    handle_not_found_error,
+    validate_required_fields,
+    handle_exception
+)
 import logging
 
 logger = logging.getLogger(__name__)
@@ -27,12 +34,14 @@ def create_lead(campaign_id):
         # Verify campaign exists
         campaign = Campaign.query.get(campaign_id)
         if not campaign:
-            return jsonify({'error': 'Campaign not found'}), 404
+            return handle_not_found_error("Campaign", campaign_id)
         
         data = request.get_json()
         
-        if not data or 'public_identifier' not in data:
-            return jsonify({'error': 'Public identifier is required'}), 400
+        # Validate required fields
+        validation_error = validate_required_fields(data, ['public_identifier'])
+        if validation_error:
+            return validation_error
         
         lead = Lead(
             campaign_id=campaign_id,
@@ -52,13 +61,13 @@ def create_lead(campaign_id):
             'lead': lead.to_dict()
         }), 201
         
-    except IntegrityError:
+    except IntegrityError as e:
         db.session.rollback()
-        return jsonify({'error': 'Lead creation failed'}), 400
+        return handle_database_error(e, "lead creation")
     except Exception as e:
         db.session.rollback()
         logger.error(f"Error creating lead: {str(e)}")
-        return jsonify({'error': str(e)}), 500
+        return handle_exception(e, "lead creation")
 
 
 @lead_bp.route('/campaigns/<campaign_id>/leads', methods=['GET'])
@@ -68,7 +77,7 @@ def list_leads(campaign_id):
     try:
         campaign = Campaign.query.get(campaign_id)
         if not campaign:
-            return jsonify({'error': 'Campaign not found'}), 404
+            return handle_not_found_error("Campaign", campaign_id)
         
         # Get query parameters for filtering and pagination
         limit = request.args.get('limit', default=100, type=int)
@@ -111,7 +120,7 @@ def list_leads(campaign_id):
         
     except Exception as e:
         logger.error(f"Error listing leads: {str(e)}")
-        return jsonify({'error': str(e)}), 500
+        return handle_exception(e, "lead listing")
 
 
 @lead_bp.route('/leads/<lead_id>', methods=['GET'])

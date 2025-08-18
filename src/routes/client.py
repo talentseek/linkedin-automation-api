@@ -26,7 +26,10 @@ def create_client():
         if validation_error:
             return validation_error
         
-        client = Client(name=data['name'])
+        client = Client(
+            name=data['name'],
+            email=data.get('email')  # Handle optional email field
+        )
         db.session.add(client)
         db.session.commit()
         
@@ -118,6 +121,8 @@ def update_client(client_id):
         
         if 'name' in data:
             client.name = data['name']
+        if 'email' in data:
+            client.email = data['email']
         
         db.session.commit()
         

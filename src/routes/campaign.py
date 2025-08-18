@@ -43,12 +43,14 @@ def create_campaign(client_id):
         # Verify client exists
         client = Client.query.get(client_id)
         if not client:
-            return jsonify({'error': 'Client not found'}), 404
+            return handle_not_found_error("Client", client_id)
         
         data = request.get_json()
         
-        if not data or 'name' not in data:
-            return jsonify({'error': 'Campaign name is required'}), 400
+        # Validate required fields
+        validation_error = validate_required_fields(data, ['name'])
+        if validation_error:
+            return validation_error
         
         campaign = Campaign(
             client_id=client_id,
@@ -66,12 +68,12 @@ def create_campaign(client_id):
             'campaign': campaign.to_dict()
         }), 201
         
-    except IntegrityError:
+    except IntegrityError as e:
         db.session.rollback()
-        return jsonify({'error': 'Campaign creation failed'}), 400
+        return handle_database_error(e, "campaign creation")
     except Exception as e:
         db.session.rollback()
-        return jsonify({'error': str(e)}), 500
+        return handle_exception(e, "campaign creation")
 
 
 @campaign_bp.route('/clients/<client_id>/campaigns', methods=['GET'])

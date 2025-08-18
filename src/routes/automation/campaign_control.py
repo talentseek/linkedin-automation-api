@@ -9,18 +9,57 @@ This module contains functionality for:
 """
 
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 from typing import Dict, Any
 from flask import jsonify, request, current_app
 from sqlalchemy import func, and_, or_, desc, asc
 
 from src.extensions import db
+from src.models.rate_usage import RateUsage
 from src.models import Campaign, Lead, Event, LinkedInAccount, Client
 
 logger = logging.getLogger(__name__)
 
 # Import the blueprint from the package
 from . import automation_bp
+
+
+def _get_rate_limit_status(linkedin_account_id: str) -> dict:
+    """Compute today's rate limit usage and remaining quotas for a LinkedIn account.
+
+    Reads persisted counts from `RateUsage` and uses app-configured limits.
+    """
+    try:
+        today = date.today()
+
+        usage = RateUsage.query.filter_by(
+            linkedin_account_id=linkedin_account_id,
+            usage_date=today,
+        ).first()
+
+        invites_sent = usage.invites_sent if usage else 0
+        messages_sent = usage.messages_sent if usage else 0
+
+        max_connections_per_day = current_app.config.get('MAX_CONNECTIONS_PER_DAY', 25)
+        max_messages_per_day = current_app.config.get('MAX_MESSAGES_PER_DAY', 100)
+
+        return {
+            'linkedin_account_id': linkedin_account_id,
+            'date': today.isoformat(),
+            'invites_sent': invites_sent,
+            'messages_sent': messages_sent,
+            'limits': {
+                'max_connections_per_day': max_connections_per_day,
+                'max_messages_per_day': max_messages_per_day,
+            },
+            'remaining': {
+                'invites': max(max_connections_per_day - invites_sent, 0),
+                'messages': max(max_messages_per_day - messages_sent, 0),
+            },
+        }
+    except Exception as e:
+        logger.error(f"Error computing rate limit status: {str(e)}")
+        return {'error': str(e)}
 
 
 @automation_bp.route('/campaigns/<campaign_id>/start', methods=['POST'])

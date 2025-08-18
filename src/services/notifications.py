@@ -97,7 +97,7 @@ class NotificationService:
             
             return success_count > 0
             
-                except Exception as e:
+        except Exception as e:
             logger.error(f"Error sending connection notification: {str(e)}")
             return False
 

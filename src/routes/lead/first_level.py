@@ -86,8 +86,7 @@ def import_first_level_connections(campaign_id):
                     last_name=connection.get('last_name'),
                     company_name=company_name,
                     public_identifier=public_identifier,
-                    status='connected',  # Already connected
-                    connection_type='1st Level'
+                    status='connected'  # Already connected
                 )
                 
                 db.session.add(lead)

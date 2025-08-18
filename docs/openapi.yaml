@@ -392,6 +392,19 @@ paths:
           schema: { type: integer, default: 50 }
       responses:
         '200': { description: OK }
+  /analytics/accounts/{linkedin_account_id}/rate-usage:
+    get:
+      summary: Account rate usage
+      parameters:
+        - in: path
+          name: linkedin_account_id
+          required: true
+          schema: { type: string }
+        - in: query
+          name: days
+          schema: { type: integer, default: 7 }
+      responses:
+        '200': { description: OK }
   /analytics/clients/{client_id}/comparative:
     get:
       summary: Comparative analytics for client
@@ -461,6 +474,65 @@ paths:
   /webhooks/unipile/messaging:
     post:
       summary: Unipile messaging webhook
+      responses:
+        '200': { description: OK }
+  /webhooks/status:
+    get:
+      summary: Webhooks status snapshot
+      responses:
+        '200': { description: OK }
+  /webhooks/health:
+    get:
+      summary: Webhook health check
+      responses:
+        '200': { description: OK }
+  /admin/webhooks:
+    get:
+      summary: List webhooks (admin)
+      responses:
+        '200': { description: OK }
+    post:
+      summary: Register webhook (admin)
+      responses:
+        '201': { description: Created }
+  /admin/webhooks/{webhook_id}:
+    delete:
+      summary: Delete webhook (admin)
+      parameters:
+        - in: path
+          name: webhook_id
+          required: true
+          schema: { type: string }
+      responses:
+        '204': { description: No Content }
+  /admin/webhooks/configure-unified:
+    post:
+      summary: Configure unified webhooks (admin)
+      responses:
+        '200': { description: OK }
+  /automation/rate-limits/{linkedin_account_id}:
+    get:
+      summary: Rate limit status for a LinkedIn account
+      parameters:
+        - in: path
+          name: linkedin_account_id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+  /sequence/timezones:
+    get:
+      summary: List timezones (helper)
+      responses:
+        '200': { description: OK }
+  /sequence/validate:
+    post:
+      summary: Validate a sequence definition (helper)
+      responses:
+        '200': { description: OK }
+  /sequence/test-delays:
+    post:
+      summary: Test sequence delays for a campaign (helper)
       responses:
         '200': { description: OK }
 

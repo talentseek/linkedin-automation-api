@@ -12,7 +12,7 @@ import logging
 from datetime import datetime
 from typing import Dict, Any
 from src.models import db, Lead, Event
-from src.services.unipile_client import UnipileClient
+from src.services.unipile_client import UnipileClient, UnipileAPIError
 
 logger = logging.getLogger(__name__)
 
@@ -51,12 +51,43 @@ def _send_connection_request(self, lead: Lead, linkedin_account, message: str) -
         
         # Get Unipile client
         unipile = self._get_unipile_client()
-        
-        # Send connection request via Unipile
+
+        # Resolve provider_id first (Unipile expects provider/member id, not vanity public identifier)
+        provider_id = None
+        try:
+            profile = unipile.get_user_profile(lead.public_identifier, linkedin_account.account_id)
+            if isinstance(profile, dict):
+                provider_id = (
+                    profile.get('provider_id')
+                    or profile.get('id')
+                    or (profile.get('user') or {}).get('provider_id')
+                )
+        except Exception as resolve_err:
+            logger.error(f"Failed to resolve provider id for {lead.public_identifier}: {str(resolve_err)}")
+            # fallthrough; provider_id may remain None
+
+        if not provider_id:
+            error_msg = "Unable to resolve LinkedIn provider ID for lead"
+            logger.error(error_msg)
+            # Create error event for observability
+            event = Event(
+                event_type='connection_request_failed',
+                lead_id=lead.id,
+                meta_json={
+                    'message': message,
+                    'error': error_msg,
+                    'public_identifier': lead.public_identifier
+                }
+            )
+            db.session.add(event)
+            db.session.commit()
+            return {'success': False, 'error': error_msg}
+
+        # Send connection request via Unipile with resolved provider_id
         try:
             result = unipile.send_connection_request(
                 account_id=linkedin_account.account_id,
-                profile_id=lead.public_identifier,
+                profile_id=provider_id,
                 message=message
             )
             

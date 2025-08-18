@@ -7,6 +7,27 @@ import uuid
 campaign_bp = Blueprint('campaign', __name__)
 
 
+@campaign_bp.route('/campaigns', methods=['GET'])
+# @jwt_required()  # Temporarily removed for development
+def list_campaigns():
+    """List campaigns, optionally filtered by client_id."""
+    try:
+        client_id = request.args.get('client_id')
+
+        query = Campaign.query
+        if client_id:
+            # Validate client exists when filtering
+            client = Client.query.get(client_id)
+            if not client:
+                return jsonify({'error': 'Client not found'}), 404
+            query = query.filter_by(client_id=client_id)
+
+        campaigns = query.all()
+        return jsonify({'campaigns': [c.to_dict() for c in campaigns]}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 @campaign_bp.route('/clients/<client_id>/campaigns', methods=['POST'])
 # @jwt_required()  # Temporarily removed for development
 def create_campaign(client_id):

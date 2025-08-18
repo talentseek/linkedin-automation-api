@@ -461,7 +461,7 @@ paths:
       summary: Webhooks status snapshot
       responses:
         '200': { description: OK }
-  /webhooks/health:
+  /webhooks/webhook/health:
     get:
       summary: Webhook health check
       responses:

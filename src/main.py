@@ -142,6 +142,14 @@ def create_app(config_name=None):
     except Exception as e:
         app.logger.error(f"Failed to register admin blueprint: {str(e)}")
     
+    # Docs (OpenAPI/Swagger UI)
+    try:
+        from src.routes.docs import docs_bp
+        app.register_blueprint(docs_bp, url_prefix='/api/v1')
+        app.logger.info("Registered docs blueprint")
+    except Exception as e:
+        app.logger.error(f"Failed to register docs blueprint: {str(e)}")
+    
     # Initialize scheduler with app context
     from src.services.scheduler import get_outreach_scheduler  # Now uses modular structure
     # Sequence engine is now modular and imported by scheduler

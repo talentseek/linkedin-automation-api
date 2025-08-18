@@ -139,10 +139,11 @@ def create_performance_indexes():
             # Create index
             columns_str = ', '.join(index['columns'])
             create_sql = f"""
-            CREATE INDEX CONCURRENTLY {index['name']} 
+            CREATE INDEX {index['name']} 
             ON {index['table']} ({columns_str})
             """
             
+            logger.info(f"Creating index: {create_sql}")
             db.session.execute(text(create_sql))
             db.session.commit()
             logger.info(f"Created index {index['name']} on {index['table']} ({columns_str})")
@@ -150,6 +151,7 @@ def create_performance_indexes():
             
         except Exception as e:
             logger.error(f"Failed to create index {index['name']}: {str(e)}")
+            db.session.rollback()
     
     logger.info(f"Index creation complete: {created_count} created, {skipped_count} skipped")
     return created_count, skipped_count

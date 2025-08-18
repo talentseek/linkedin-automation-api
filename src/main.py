@@ -184,6 +184,14 @@ def create_app(config_name=None):
     
 
     
+    # Register global error handlers
+    try:
+        from src.utils.error_handlers import register_error_handlers
+        register_error_handlers(app)
+        app.logger.info("Registered global error handlers")
+    except Exception as e:
+        app.logger.error(f"Failed to register error handlers: {str(e)}")
+    
     # Simple health check endpoint
     @app.route('/')
     def index():

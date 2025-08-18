@@ -2,6 +2,13 @@ from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from src.models import db, Campaign, Client
 from sqlalchemy.exc import IntegrityError
+from src.utils.error_handling import (
+    handle_validation_error,
+    handle_database_error,
+    handle_not_found_error,
+    validate_required_fields,
+    handle_exception
+)
 import uuid
 
 campaign_bp = Blueprint('campaign', __name__)
@@ -19,13 +26,13 @@ def list_campaigns():
             # Validate client exists when filtering
             client = Client.query.get(client_id)
             if not client:
-                return jsonify({'error': 'Client not found'}), 404
+                return handle_not_found_error("Client", client_id)
             query = query.filter_by(client_id=client_id)
 
         campaigns = query.all()
         return jsonify({'campaigns': [c.to_dict() for c in campaigns]}), 200
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return handle_exception(e, "campaign listing")
 
 
 @campaign_bp.route('/clients/<client_id>/campaigns', methods=['POST'])

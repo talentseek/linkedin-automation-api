@@ -284,8 +284,7 @@ def get_connection_pool_stats():
             'pool_size': engine.pool.size(),
             'checked_in': engine.pool.checkedin(),
             'checked_out': engine.pool.checkedout(),
-            'overflow': engine.pool.overflow(),
-            'invalid': getattr(engine.pool, 'invalid', lambda: 0)()
+            'overflow': engine.pool.overflow()
         }
         
         return jsonify({

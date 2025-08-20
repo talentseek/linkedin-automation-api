@@ -151,25 +151,30 @@ def create_app(config_name=None):
     except Exception as e:
         app.logger.error(f"Failed to register docs blueprint: {str(e)}")
     
-    # Initialize scheduler with app context
-    from src.services.scheduler import get_outreach_scheduler  # Now uses modular structure
-    # Sequence engine is now modular and imported by scheduler
-    global outreach_scheduler
-    outreach_scheduler = get_outreach_scheduler()
-    outreach_scheduler.init_app(app)
-    
-    # Set the global instance in the scheduler module
-    import src.services.scheduler
-    src.services.scheduler._outreach_scheduler = outreach_scheduler
-    
-    # Start scheduler in production or when explicitly requested
-    # Use resolved config_name rather than app.config['FLASK_ENV'] (FLASK_ENV is deprecated in Flask 3)
-    if config_name == 'production' or app.config.get('START_SCHEDULER', False):
-        try:
-            outreach_scheduler.start()
-            app.logger.info("Outreach scheduler started automatically")
-        except Exception as e:
-            app.logger.error(f"Failed to start scheduler: {str(e)}")
+    # Initialize scheduler only when explicitly enabled to avoid blocking startup/health checks
+    try:
+        start_scheduler = app.config.get('START_SCHEDULER', False)
+        if start_scheduler:
+            from src.services.scheduler import get_outreach_scheduler  # Now uses modular structure
+            # Sequence engine is now modular and imported by scheduler
+            global outreach_scheduler
+            outreach_scheduler = get_outreach_scheduler()
+            outreach_scheduler.init_app(app)
+
+            # Set the global instance in the scheduler module
+            import src.services.scheduler as scheduler_module
+            scheduler_module._outreach_scheduler = outreach_scheduler
+
+            # Start scheduler when explicitly requested
+            try:
+                outreach_scheduler.start()
+                app.logger.info("Outreach scheduler started automatically")
+            except Exception as e:
+                app.logger.error(f"Failed to start scheduler: {str(e)}")
+        else:
+            app.logger.info("START_SCHEDULER is false; skipping scheduler init/start")
+    except Exception as e:
+        app.logger.error(f"Scheduler setup failed: {str(e)}")
     
     # Create database tables (avoid fatal boot failures in production)
     try:

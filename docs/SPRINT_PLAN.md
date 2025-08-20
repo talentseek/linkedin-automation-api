@@ -51,7 +51,7 @@ Last Updated: 2025-08-20
 
 ---
 
-## Milestone 2 — Scheduler & Sequence Engine Overhaul 🚀 IN PROGRESS
+## Milestone 2 — Scheduler & Sequence Engine Overhaul ✅ NEARLY COMPLETE
 
 ### Definition of Done
 1) Scheduler reliably advances leads across all steps honoring working hours, delays, and rate limits.
@@ -59,17 +59,17 @@ Last Updated: 2025-08-20
 3) Full observability (structured logs, metrics, dashboards) for steps and rate usage.
 
 ### Tasks
-- [ ] [M2] Fix `_is_lead_ready_for_processing` (statuses, delays per step, rate-limit checks)
-- [ ] [M2] Fix `_process_single_lead` (refresh, execute, advance step, persist, emit event)
-- [ ] [M2] Implement retry with jitter + circuit breakers for Unipile calls
-- [ ] [M2] Validate and compute step delays; make timezone-safe; respect working hours
-- [ ] [M2] Step validation (required fields, action_type, message templates)
-- [ ] [M2] Personalization tokens: strict validation + preview util
-- [ ] [M2] Rate limits: persist daily counts; admin visibility; auto-reset
-- [ ] [M2] Structured logging and metrics for each step execution
-- [ ] [M2] Update OpenAPI for scheduler/admin endpoints; add E2E tests
+- [x] [M2] Fix `_is_lead_ready_for_processing` (statuses, delays per step, rate-limit checks)
+- [x] [M2] Fix `_process_single_lead` (refresh, execute, advance step, persist, emit event)
+- [x] [M2] Implement retry with jitter + circuit breakers for Unipile calls
+- [x] [M2] Validate and compute step delays; make timezone-safe; respect working hours
+- [x] [M2] Step validation (required fields, action_type, message templates)
+- [x] [M2] Personalization tokens: strict validation + preview util
+- [x] [M2] Rate limits: persist daily counts; admin visibility; auto-reset
+- [x] [M2] Structured logging and metrics for each step execution
+- [x] [M2] Update OpenAPI for scheduler/admin endpoints; add E2E tests
 
-**Status**: 🚀 STARTING - Foundation complete, ready to tackle scheduler logic
+**Status**: ✅ NEARLY COMPLETE - Connection detection fixed, system fully functional for lead progression
 
 — Unipile references: Messaging/Chats (send message; start chat vs send to chat), Users (profile IDs).
 

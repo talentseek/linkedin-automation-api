@@ -3,6 +3,7 @@ import sys
 import logging
 from flask import Flask, send_from_directory, jsonify
 from flask_cors import CORS
+from datetime import datetime
 
 # Add src directory to Python path
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
@@ -196,6 +197,26 @@ def create_app(config_name=None):
     @app.route('/')
     def index():
         return jsonify({'status': 'ok', 'message': 'LinkedIn Automation API is running'})
+    
+    @app.route('/health', methods=['GET'])
+    def health_check():
+        """Health check endpoint for deployment monitoring."""
+        try:
+            # Basic health check - database connection
+            db.session.execute('SELECT 1')
+            return jsonify({
+                'status': 'healthy',
+                'timestamp': datetime.utcnow().isoformat(),
+                'database': 'connected',
+                'version': '1.0.0'
+            }), 200
+        except Exception as e:
+            app.logger.error(f"Health check failed: {str(e)}")
+            return jsonify({
+                'status': 'unhealthy',
+                'timestamp': datetime.utcnow().isoformat(),
+                'error': str(e)
+            }), 503
     
     return app
 

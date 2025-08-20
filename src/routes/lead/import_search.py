@@ -1,11 +1,8 @@
 """
 Lead import and search functionality.
 
-This module contains endpoints for:
-- Importing leads from LinkedIn searches
-- Searching for leads
-- Smart search functionality
-- Lead enrichment
+This module contains the single working endpoint for importing leads:
+- search-and-import: Advanced search and import with proper pagination
 """
 
 from flask import request, jsonify
@@ -13,7 +10,6 @@ from flask_jwt_extended import jwt_required
 from sqlalchemy.exc import IntegrityError
 from src.models import db, Lead, Campaign, LinkedInAccount, Event
 from src.services.unipile_client import UnipileClient, UnipileAPIError
-from src.services.search_parameters_helper import SearchParametersHelper, build_sales_director_search, build_tech_engineer_search, build_cxo_search
 from src.routes.lead import lead_bp
 from datetime import datetime
 import logging
@@ -71,10 +67,17 @@ def _extract_company_name_from_profile(profile: dict) -> str:
         return None
 
 
-@lead_bp.route('/campaigns/<campaign_id>/leads/import', methods=['POST'])
+@lead_bp.route('/campaigns/<campaign_id>/leads/search-and-import', methods=['POST'])
 # @jwt_required()  # Temporarily removed for development
-def import_leads_from_search(campaign_id):
-    """Import leads from LinkedIn Sales Navigator search."""
+def search_and_import_leads(campaign_id):
+    """Search for leads and import them with proper pagination support.
+    
+    This is the single, unified endpoint for all lead import scenarios:
+    - URL-based imports (Sales Navigator URLs)
+    - Keyword-based searches
+    - Advanced search configurations
+    - All with proper cursor pagination
+    """
     try:
         # Verify campaign exists
         campaign = Campaign.query.get(campaign_id)
@@ -98,368 +101,208 @@ def import_leads_from_search(campaign_id):
         if linkedin_account.status != 'connected':
             return jsonify({'error': 'LinkedIn account is not connected'}), 400
         
-        # Prepare search parameters
-        search_params = data.get('search_params', {})
+        # Get pagination parameters
+        max_pages = data.get('max_pages', 25)
+        max_leads = data.get('max_leads', 253)
+        page_limit = data.get('page_limit', 10)
         
         # Use Unipile API to search for profiles
         unipile = UnipileClient()
-        search_results = unipile.search_linkedin_profiles(
-            account_id=linkedin_account.account_id,
-            search_params=search_params
-        )
-        
         imported_leads = []
         errors = []
+        total_profiles_found = 0
+        pages_processed = 0
+        cursor = None
         
-        # Process each profile from search results
-        profiles = search_results.get('items', [])
+        # Determine search type and parameters
+        search_config = data.get('search_config', {})
+        url = data.get('url') or search_config.get('url')
         
-        for profile in profiles:
-            try:
-                # Extract profile information
-                public_identifier = profile.get('public_identifier')
-                if not public_identifier:
-                    continue
-                
-                # Check if lead already exists in this campaign
-                existing_lead = Lead.query.filter_by(
-                    campaign_id=campaign_id,
-                    public_identifier=public_identifier
-                ).first()
-                
-                if existing_lead:
-                    continue  # Skip if already exists
-                
-                # Extract company name
-                company_name = _extract_company_name_from_profile(profile)
-                
-                # Create new lead
-                lead = Lead(
-                    campaign_id=campaign_id,
-                    first_name=profile.get('first_name'),
-                    last_name=profile.get('last_name'),
-                    company_name=company_name,
-                    public_identifier=public_identifier,
-                    status='pending_invite'
-                )
-                
-                db.session.add(lead)
-                imported_leads.append({
-                    'public_identifier': public_identifier,
-                    'first_name': profile.get('first_name'),
-                    'last_name': profile.get('last_name'),
-                    'company_name': company_name
-                })
-                
-            except Exception as e:
-                errors.append({
-                    'public_identifier': profile.get('public_identifier'),
-                    'error': str(e)
-                })
-                logger.error(f"Error processing profile {profile.get('public_identifier')}: {str(e)}")
-        
-        db.session.commit()
-        
-        return jsonify({
-            'message': f'Successfully imported {len(imported_leads)} leads',
-            'imported_count': len(imported_leads),
-            'imported_leads': imported_leads,
-            'errors': errors
-        }), 200
-        
-    except Exception as e:
-        db.session.rollback()
-        logger.error(f"Error importing leads: {str(e)}")
-        return jsonify({'error': str(e)}), 500
-
-
-@lead_bp.route('/campaigns/<campaign_id>/leads/import-from-url', methods=['POST'])
-# @jwt_required()  # Temporarily removed for development
-def import_leads_from_url(campaign_id):
-    """Import leads from a LinkedIn Sales Navigator URL."""
-    try:
-        # Verify campaign exists
-        campaign = Campaign.query.get(campaign_id)
-        if not campaign:
-            return jsonify({'error': 'Campaign not found'}), 404
-        
-        data = request.get_json()
-        
-        if not data or 'url' not in data:
-            return jsonify({'error': 'URL is required'}), 400
-        
-        if not data or 'account_id' not in data:
-            return jsonify({'error': 'LinkedIn account ID is required'}), 400
-        
-        # Verify LinkedIn account exists and belongs to the same client
-        linkedin_account = LinkedInAccount.query.filter_by(
-            id=data['account_id'],
-            client_id=campaign.client_id
-        ).first()
-        
-        if not linkedin_account:
-            return jsonify({'error': 'LinkedIn account not found or not authorized'}), 404
-        
-        if linkedin_account.status != 'connected':
-            return jsonify({'error': 'LinkedIn account is not connected'}), 400
-        
-        # Use Unipile API to search for profiles from URL
-        unipile = UnipileClient()
-        search_results = unipile.search_linkedin_from_url(
-            account_id=linkedin_account.account_id,
-            url=data['url']
-        )
-        
-        imported_leads = []
-        errors = []
-        
-        # Process each profile from search results
-        profiles = search_results.get('items', [])
-        
-        for profile in profiles:
-            try:
-                # Extract profile information
-                public_identifier = profile.get('public_identifier')
-                if not public_identifier:
-                    continue
-                
-                # Check if lead already exists in this campaign
-                existing_lead = Lead.query.filter_by(
-                    campaign_id=campaign_id,
-                    public_identifier=public_identifier
-                ).first()
-                
-                if existing_lead:
-                    continue  # Skip if already exists
-                
-                # Extract company name
-                company_name = _extract_company_name_from_profile(profile)
-                
-                # Create new lead
-                lead = Lead(
-                    campaign_id=campaign_id,
-                    first_name=profile.get('first_name'),
-                    last_name=profile.get('last_name'),
-                    company_name=company_name,
-                    public_identifier=public_identifier,
-                    status='pending_invite'
-                )
-                
-                db.session.add(lead)
-                imported_leads.append({
-                    'public_identifier': public_identifier,
-                    'first_name': profile.get('first_name'),
-                    'last_name': profile.get('last_name'),
-                    'company_name': company_name
-                })
-                
-            except Exception as e:
-                errors.append({
-                    'public_identifier': profile.get('public_identifier'),
-                    'error': str(e)
-                })
-                logger.error(f"Error processing profile {profile.get('public_identifier')}: {str(e)}")
-        
-        db.session.commit()
-        
-        return jsonify({
-            'message': f'Successfully imported {len(imported_leads)} leads',
-            'imported_count': len(imported_leads),
-            'imported_leads': imported_leads,
-            'errors': errors
-        }), 200
-        
-    except Exception as e:
-        db.session.rollback()
-        logger.error(f"Error importing leads from URL: {str(e)}")
-        return jsonify({'error': str(e)}), 500
-
-
-@lead_bp.route('/campaigns/<campaign_id>/leads/search', methods=['POST'])
-# @jwt_required()  # Temporarily removed for development
-def search_leads(campaign_id):
-    """Search for leads without importing them."""
-    try:
-        # Verify campaign exists
-        campaign = Campaign.query.get(campaign_id)
-        if not campaign:
-            return jsonify({'error': 'Campaign not found'}), 404
-        
-        data = request.get_json()
-        
-        if not data or 'account_id' not in data:
-            return jsonify({'error': 'LinkedIn account ID is required'}), 400
-        
-        # Verify LinkedIn account exists and belongs to the same client
-        linkedin_account = LinkedInAccount.query.filter_by(
-            id=data['account_id'],
-            client_id=campaign.client_id
-        ).first()
-        
-        if not linkedin_account:
-            return jsonify({'error': 'LinkedIn account not found or not authorized'}), 404
-        
-        if linkedin_account.status != 'connected':
-            return jsonify({'error': 'LinkedIn account is not connected'}), 400
-        
-        # Prepare search parameters
-        search_params = data.get('search_params', {})
-        
-        # Use Unipile API to search for profiles
-        unipile = UnipileClient()
-        search_results = unipile.search_linkedin_profiles(
-            account_id=linkedin_account.account_id,
-            search_params=search_params
-        )
-        
-        # Process results
-        profiles = search_results.get('items', [])
-        processed_profiles = []
-        
-        for profile in profiles:
-            try:
-                # Extract company name
-                company_name = _extract_company_name_from_profile(profile)
-                
-                # Check if lead already exists in this campaign
-                existing_lead = Lead.query.filter_by(
-                    campaign_id=campaign_id,
-                    public_identifier=profile.get('public_identifier')
-                ).first()
-                
-                processed_profiles.append({
-                    'public_identifier': profile.get('public_identifier'),
-                    'first_name': profile.get('first_name'),
-                    'last_name': profile.get('last_name'),
-                    'company_name': company_name,
-                    'headline': profile.get('headline'),
-                    'already_imported': existing_lead is not None
-                })
-                
-            except Exception as e:
-                logger.error(f"Error processing profile {profile.get('public_identifier')}: {str(e)}")
-        
-        return jsonify({
-            'total_results': len(processed_profiles),
-            'profiles': processed_profiles
-        }), 200
-        
-    except Exception as e:
-        logger.error(f"Error searching leads: {str(e)}")
-        return jsonify({'error': str(e)}), 500
-
-
-@lead_bp.route('/campaigns/<campaign_id>/leads/smart-search', methods=['POST'])
-# @jwt_required()  # Temporarily removed for development
-def smart_search_leads(campaign_id):
-    """Smart search for leads using predefined search templates."""
-    try:
-        # Verify campaign exists
-        campaign = Campaign.query.get(campaign_id)
-        if not campaign:
-            return jsonify({'error': 'Campaign not found'}), 404
-        
-        data = request.get_json()
-        
-        if not data or 'account_id' not in data:
-            return jsonify({'error': 'LinkedIn account ID is required'}), 400
-        
-        if not data or 'search_type' not in data:
-            return jsonify({'error': 'Search type is required'}), 400
-        
-        # Verify LinkedIn account exists and belongs to the same client
-        linkedin_account = LinkedInAccount.query.filter_by(
-            id=data['account_id'],
-            client_id=campaign.client_id
-        ).first()
-        
-        if not linkedin_account:
-            return jsonify({'error': 'LinkedIn account not found or not authorized'}), 404
-        
-        if linkedin_account.status != 'connected':
-            return jsonify({'error': 'LinkedIn account is not connected'}), 400
-        
-        # Build search parameters based on type
-        search_type = data['search_type']
-        custom_params = data.get('custom_params', {})
-        
-        if search_type == 'sales_director':
-            search_params = build_sales_director_search(custom_params)
-        elif search_type == 'tech_engineer':
-            search_params = build_tech_engineer_search(custom_params)
-        elif search_type == 'cxo':
-            search_params = build_cxo_search(custom_params)
+        if url:
+            # URL-based search (Sales Navigator URL)
+            while pages_processed < max_pages and len(imported_leads) < max_leads:
+                try:
+                    search_results = unipile.search_linkedin_from_url(
+                        account_id=linkedin_account.account_id,
+                        url=url,
+                        cursor=cursor,
+                        limit=page_limit
+                    )
+                    
+                    profiles = search_results.get('items', [])
+                    if not profiles:
+                        break
+                    
+                    total_profiles_found += len(profiles)
+                    pages_processed += 1
+                    
+                    for profile in profiles:
+                        try:
+                            public_identifier = profile.get('public_identifier')
+                            if not public_identifier:
+                                continue
+                            
+                            # Check if lead already exists
+                            existing_lead = Lead.query.filter_by(
+                                campaign_id=campaign_id,
+                                public_identifier=public_identifier
+                            ).first()
+                            
+                            if existing_lead:
+                                continue
+                            
+                            # Extract company name
+                            company_name = _extract_company_name_from_profile(profile)
+                            
+                            # Create new lead
+                            lead = Lead(
+                                campaign_id=campaign_id,
+                                first_name=profile.get('first_name'),
+                                last_name=profile.get('last_name'),
+                                company_name=company_name,
+                                public_identifier=public_identifier,
+                                status='pending_invite'
+                            )
+                            
+                            db.session.add(lead)
+                            imported_leads.append({
+                                'public_identifier': public_identifier,
+                                'first_name': profile.get('first_name'),
+                                'last_name': profile.get('last_name'),
+                                'company_name': company_name
+                            })
+                            
+                            if len(imported_leads) >= max_leads:
+                                break
+                                
+                        except Exception as e:
+                            errors.append({
+                                'public_identifier': profile.get('public_identifier'),
+                                'error': str(e)
+                            })
+                            logger.error(f"Error processing profile {profile.get('public_identifier')}: {str(e)}")
+                    
+                    cursor = search_results.get('cursor')
+                    if not cursor:
+                        break
+                    
+                    # Small delay to avoid rate limiting
+                    import time
+                    time.sleep(0.1)
+                    
+                except Exception as e:
+                    logger.error(f"Error fetching page {pages_processed + 1}: {str(e)}")
+                    errors.append({
+                        'page': pages_processed + 1,
+                        'error': str(e)
+                    })
+                    break
         else:
-            return jsonify({'error': 'Invalid search type'}), 400
-        
-        # Use Unipile API to search for profiles
-        unipile = UnipileClient()
-        search_results = unipile.search_linkedin_profiles(
-            account_id=linkedin_account.account_id,
-            search_params=search_params
-        )
-        
-        imported_leads = []
-        errors = []
-        
-        # Process each profile from search results
-        profiles = search_results.get('items', [])
-        
-        for profile in profiles:
-            try:
-                # Extract profile information
-                public_identifier = profile.get('public_identifier')
-                if not public_identifier:
-                    continue
-                
-                # Check if lead already exists in this campaign
-                existing_lead = Lead.query.filter_by(
-                    campaign_id=campaign_id,
-                    public_identifier=public_identifier
-                ).first()
-                
-                if existing_lead:
-                    continue  # Skip if already exists
-                
-                # Extract company name
-                company_name = _extract_company_name_from_profile(profile)
-                
-                # Create new lead
-                lead = Lead(
-                    campaign_id=campaign_id,
-                    first_name=profile.get('first_name'),
-                    last_name=profile.get('last_name'),
-                    company_name=company_name,
-                    public_identifier=public_identifier,
-                    status='pending_invite'
-                )
-                
-                db.session.add(lead)
-                imported_leads.append({
-                    'public_identifier': public_identifier,
-                    'first_name': profile.get('first_name'),
-                    'last_name': profile.get('last_name'),
-                    'company_name': company_name
-                })
-                
-            except Exception as e:
-                errors.append({
-                    'public_identifier': profile.get('public_identifier'),
-                    'error': str(e)
-                })
-                logger.error(f"Error processing profile {profile.get('public_identifier')}: {str(e)}")
+            # Keyword/parameter-based search
+            search_params = search_config or data.get('search_params', {})
+            
+            while pages_processed < max_pages and len(imported_leads) < max_leads:
+                try:
+                    search_results = unipile.search_linkedin_profiles(
+                        account_id=linkedin_account.account_id,
+                        search_params=search_params,
+                        cursor=cursor,
+                        limit=page_limit
+                    )
+                    
+                    profiles = search_results.get('items', [])
+                    if not profiles:
+                        break
+                    
+                    total_profiles_found += len(profiles)
+                    pages_processed += 1
+                    
+                    for profile in profiles:
+                        try:
+                            public_identifier = profile.get('public_identifier')
+                            if not public_identifier:
+                                continue
+                            
+                            # Check if lead already exists
+                            existing_lead = Lead.query.filter_by(
+                                campaign_id=campaign_id,
+                                public_identifier=public_identifier
+                            ).first()
+                            
+                            if existing_lead:
+                                continue
+                            
+                            # Extract company name
+                            company_name = _extract_company_name_from_profile(profile)
+                            
+                            # Create new lead
+                            lead = Lead(
+                                campaign_id=campaign_id,
+                                first_name=profile.get('first_name'),
+                                last_name=profile.get('last_name'),
+                                company_name=company_name,
+                                public_identifier=public_identifier,
+                                status='pending_invite'
+                            )
+                            
+                            db.session.add(lead)
+                            imported_leads.append({
+                                'public_identifier': public_identifier,
+                                'first_name': profile.get('first_name'),
+                                'last_name': profile.get('last_name'),
+                                'company_name': company_name
+                            })
+                            
+                            if len(imported_leads) >= max_leads:
+                                break
+                                
+                        except Exception as e:
+                            errors.append({
+                                'public_identifier': profile.get('public_identifier'),
+                                'error': str(e)
+                            })
+                            logger.error(f"Error processing profile {profile.get('public_identifier')}: {str(e)}")
+                    
+                    cursor = search_results.get('cursor')
+                    if not cursor:
+                        break
+                    
+                    # Small delay to avoid rate limiting
+                    import time
+                    time.sleep(0.1)
+                    
+                except Exception as e:
+                    logger.error(f"Error fetching page {pages_processed + 1}: {str(e)}")
+                    errors.append({
+                        'page': pages_processed + 1,
+                        'error': str(e)
+                    })
+                    break
         
         db.session.commit()
         
         return jsonify({
-            'message': f'Successfully imported {len(imported_leads)} leads using {search_type} search',
-            'search_type': search_type,
+            'message': f'Successfully imported {len(imported_leads)} leads from {pages_processed} pages',
             'imported_count': len(imported_leads),
             'imported_leads': imported_leads,
-            'errors': errors
+            'errors': errors,
+            'summary': {
+                'total_profiles_found': total_profiles_found,
+                'new_leads_imported': len(imported_leads),
+                'pages_processed': pages_processed,
+                'max_pages_requested': max_pages,
+                'max_leads_requested': max_leads,
+                'errors': len(errors)
+            },
+            'pagination_info': {
+                'max_pages': max_pages,
+                'max_leads': max_leads,
+                'page_limit': page_limit,
+                'pages_processed': pages_processed
+            }
         }), 200
         
     except Exception as e:
         db.session.rollback()
-        logger.error(f"Error smart searching leads: {str(e)}")
+        logger.error(f"Error in search and import: {str(e)}")
         return jsonify({'error': str(e)}), 500

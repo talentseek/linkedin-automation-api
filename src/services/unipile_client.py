@@ -63,10 +63,19 @@ class UnipileClient:
             raise UnipileAPIError("No Unipile API key available")
         
         url = f"{self.base_url}{endpoint}"
-        # Base headers always include API key; Content-Type only when sending JSON
-        headers = {
-            'X-API-KEY': self.api_key,
-        }
+        
+        # Try different authentication methods for api3 endpoint
+        if 'api3.unipile.com' in self.base_url:
+            # For api3 endpoint, try Authorization header first
+            headers = {
+                'Authorization': f'Bearer {self.api_key}',
+            }
+        else:
+            # For regular api endpoint, use X-API-KEY
+            headers = {
+                'X-API-KEY': self.api_key,
+            }
+        
         # Only set JSON content type if using JSON body; allow requests to set for form/multipart
         if 'json' in kwargs and kwargs['json'] is not None:
             headers['Content-Type'] = 'application/json'

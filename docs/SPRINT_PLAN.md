@@ -51,7 +51,7 @@ Last Updated: 2025-08-20
 
 ---
 
-## Milestone 2 — Scheduler & Sequence Engine Overhaul ✅ NEARLY COMPLETE
+## Milestone 2 — Scheduler & Sequence Engine Overhaul ✅ COMPLETE
 
 ### Definition of Done
 1) Scheduler reliably advances leads across all steps honoring working hours, delays, and rate limits.
@@ -69,7 +69,7 @@ Last Updated: 2025-08-20
 - [x] [M2] Structured logging and metrics for each step execution
 - [x] [M2] Update OpenAPI for scheduler/admin endpoints; add E2E tests
 
-**Status**: ✅ NEARLY COMPLETE - Connection detection fixed, system fully functional for lead progression
+**Status**: ✅ COMPLETE - Connection detection fixed, system fully functional for lead progression
 
 — Unipile references: Messaging/Chats (send message; start chat vs send to chat), Users (profile IDs).
 

@@ -339,14 +339,16 @@ def test_relation_processing():
                     'step': 'get_relations',
                     'status': 'success',
                     'relations_count': len(relations_items),
-                    'response_keys': list(relations_response.keys())
+                    'response_keys': list(relations_response.keys()),
+                    'full_response': relations_response  # Add full response for debugging
                 })
             else:
                 results['steps'].append({
                     'step': 'get_relations',
                     'status': 'error',
                     'error': 'Invalid response format',
-                    'response_type': type(relations_response).__name__
+                    'response_type': type(relations_response).__name__,
+                    'full_response': relations_response  # Add full response for debugging
                 })
                 results['errors'].append("Invalid relations response format")
                 return jsonify(results), 500

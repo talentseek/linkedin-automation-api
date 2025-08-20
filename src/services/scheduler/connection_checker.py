@@ -106,6 +106,8 @@ def _check_single_account_relations(account_id, unipile):
 def _process_relation(relation, account_id):
     """Process a single relation."""
     try:
+        logger.info(f"=== PROCESSING RELATION ===")
+        
         # Extract relation data using correct field names
         member_id = relation.get('member_id')
         public_identifier = relation.get('public_identifier')
@@ -117,14 +119,18 @@ def _process_relation(relation, account_id):
         
         if not member_id and not public_identifier:
             logger.warning("Relation missing both member_id and public_identifier")
+            logger.info(f"=== RELATION PROCESSING COMPLETE (no identifiers) ===")
             return
         
         # Find lead by member_id (provider_id) or public_identifier
         lead = None
+        logger.info(f"Searching for lead with member_id: {member_id}")
         if member_id:
             lead = Lead.query.filter_by(provider_id=member_id).first()
             if lead:
                 logger.info(f"Found lead by member_id: {member_id}")
+            else:
+                logger.info(f"No lead found by member_id: {member_id}")
         
         if not lead and public_identifier:
             logger.info(f"Searching for lead by public_identifier: {public_identifier}")
@@ -140,12 +146,14 @@ def _process_relation(relation, account_id):
         
         if not lead:
             logger.info(f"No lead found for member_id: {member_id} or public_identifier: {public_identifier}")
+            logger.info(f"=== RELATION PROCESSING COMPLETE (no matching lead) ===")
             return
         
         logger.info(f"Processing lead {lead.id} with status: {lead.status}")
         
         # Update lead status if needed
         if lead.status in ['invite_sent', 'invited']:
+            logger.info(f"Updating lead {lead.id} status from {lead.status} to connected")
             old_status = lead.status
             lead.status = 'connected'
             lead.connected_at = datetime.utcnow()
@@ -168,11 +176,14 @@ def _process_relation(relation, account_id):
             db.session.commit()
             
             logger.info(f"Lead {lead.id} connected via periodic check: {old_status} -> connected")
+            logger.info(f"=== RELATION PROCESSING COMPLETE (status updated) ===")
         else:
             logger.info(f"Lead {lead.id} status is {lead.status}, not updating")
+            logger.info(f"=== RELATION PROCESSING COMPLETE (no status update needed) ===")
             
     except Exception as e:
         logger.error(f"Error processing relation: {str(e)}")
+        logger.info(f"=== RELATION PROCESSING COMPLETE (error) ===")
         db.session.rollback()
 
 

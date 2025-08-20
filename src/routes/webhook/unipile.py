@@ -9,6 +9,7 @@ This module contains endpoints for:
 """
 
 import logging
+import json
 from flask import request, jsonify
 from src.models import db, WebhookData
 from src.routes.webhook import webhook_bp
@@ -31,10 +32,13 @@ def handle_unipile_simple():
         
         # Store webhook data
         webhook_data = WebhookData(
-            event_type='simple',
-            payload=payload,
-            headers=dict(request.headers),
-            processed=True
+            method=request.method,
+            url=request.url,
+            headers=json.dumps(dict(request.headers)),
+            raw_data=request.get_data(as_text=True),
+            json_data=json.dumps(payload),
+            content_type=request.content_type,
+            content_length=request.content_length
         )
         
         db.session.add(webhook_data)

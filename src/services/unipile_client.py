@@ -50,12 +50,12 @@ class UnipileClient:
         # Try Flask config if available
         try:
             if current_app:
-                return current_app.config.get('UNIPILE_API_BASE_URL', 'https://api.unipile.com/v1')
+                return current_app.config.get('UNIPILE_API_BASE_URL', 'https://api3.unipile.com:13359')
         except RuntimeError:
             # No application context
             pass
         
-        return 'https://api.unipile.com/v1'
+        return 'https://api3.unipile.com:13359'
     
     def _make_request(self, method, endpoint, **kwargs):
         """Make a request to the Unipile API."""
@@ -427,6 +427,7 @@ class UnipileClient:
         Returns:
             dict: { items: [...], cursor: "..." }
         """
+        # Based on Unipile documentation: client.users.getAllRelations()
         endpoint = "/api/v1/users/relations"
         params = {'account_id': account_id}
         if cursor:

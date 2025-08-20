@@ -250,5 +250,27 @@ def test_message_edited_webhook():
         return jsonify({'error': str(e)}), 500
 
 
+@webhook_bp.route('/debug-test', methods=['GET'])
+def debug_test():
+    """Simple debug endpoint to test if latest code is deployed."""
+    try:
+        # Test function import
+        function_exists = _check_single_account_relations is not None
+        function_type = type(_check_single_account_relations).__name__
+        
+        return jsonify({
+            'message': 'Debug test endpoint working',
+            'function_exists': function_exists,
+            'function_type': function_type,
+            'timestamp': datetime.utcnow().isoformat(),
+            'deployment_version': 'latest'
+        }), 200
+    except Exception as e:
+        return jsonify({
+            'error': str(e),
+            'timestamp': datetime.utcnow().isoformat()
+        }), 500
+
+
 # Import the handler functions for testing
 from .handlers import handle_new_relation_webhook, handle_message_received_webhook

@@ -21,7 +21,7 @@ def _check_single_account_relations(account_id, unipile):
     
     # Get relations from Unipile
     try:
-            relations_page = unipile.get_relations(account_id=account_id)
+        relations_page = unipile.get_relations(account_id=account_id)
             logger.info(f"Retrieved relations for account {account_id}: {relations_page}")
             
             if not relations_page or not isinstance(relations_page, dict):

@@ -438,6 +438,19 @@ class UnipileClient:
             params['limit'] = limit
         return self._make_request("GET", endpoint, params=params)
 
+    def resync_linkedin_account(self, account_id):
+        """
+        Resync LinkedIn account data to ensure it's up to date.
+        
+        Args:
+            account_id: The LinkedIn account ID
+            
+        Returns:
+            dict: Resync response
+        """
+        endpoint = f"/api/v1/linkedin/accounts/{account_id}/resync"
+        return self._make_request("POST", endpoint)
+
     def get_sent_invitations(self, account_id):
         """
         Get all sent invitations for a LinkedIn account.

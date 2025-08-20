@@ -85,6 +85,14 @@ def process_relations():
         account_id = data['account_id']
         logger.info(f"Starting relation processing for account: {account_id}")
 
+        # Test that the function exists
+        try:
+            logger.info(f"Function _check_single_account_relations exists: {_check_single_account_relations}")
+            logger.info(f"Function type: {type(_check_single_account_relations)}")
+        except Exception as e:
+            logger.error(f"Error checking function existence: {str(e)}")
+            return jsonify({'error': f'Function import issue: {str(e)}'}), 500
+
         unipile = UnipileClient()
         logger.info("UnipileClient created successfully")
         

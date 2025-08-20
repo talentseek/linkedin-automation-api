@@ -307,6 +307,25 @@ def test_relation_processing():
             results['errors'].append(f"Unipile client failed: {str(e)}")
             return jsonify(results), 500
 
+        # Step 2.5: Get account details to verify account_id
+        try:
+            account_details = unipile.get_account(account_id)
+            results['steps'].append({
+                'step': 'get_account_details',
+                'status': 'success',
+                'account_type': account_details.get('type'),
+                'account_status': account_details.get('status'),
+                'account_name': account_details.get('name')
+            })
+        except Exception as e:
+            results['steps'].append({
+                'step': 'get_account_details',
+                'status': 'error',
+                'error': str(e)
+            })
+            results['errors'].append(f"Get account details failed: {str(e)}")
+            return jsonify(results), 500
+
         # Step 3: Get relations
         try:
             relations_response = unipile.get_relations(account_id=account_id)
@@ -410,6 +429,37 @@ def debug_test():
             'timestamp': datetime.utcnow().isoformat(),
             'deployment_version': 'latest'
         }), 200
+    except Exception as e:
+        return jsonify({
+            'error': str(e),
+            'timestamp': datetime.utcnow().isoformat()
+        }), 500
+
+
+@webhook_bp.route('/find-linkedin-accounts', methods=['GET'])
+def find_linkedin_accounts():
+    """Find all LinkedIn accounts in the database."""
+    try:
+        from src.models.linkedin_account import LinkedInAccount
+        
+        accounts = LinkedInAccount.query.all()
+        results = []
+        
+        for account in accounts:
+            results.append({
+                'id': account.id,
+                'name': account.name,
+                'account_id': account.account_id,
+                'provider_id': account.provider_id,
+                'created_at': account.created_at.isoformat() if account.created_at else None
+            })
+        
+        return jsonify({
+            'linkedin_accounts': results,
+            'count': len(results),
+            'timestamp': datetime.utcnow().isoformat()
+        }), 200
+        
     except Exception as e:
         return jsonify({
             'error': str(e),

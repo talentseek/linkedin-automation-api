@@ -462,6 +462,55 @@ class UnipileClient:
         Returns:
             dict: List of sent invitations
         """
-        endpoint = f"/api/v1/linkedin/accounts/{account_id}/invitations"
-        return self._make_request("GET", endpoint)
+        # Based on Unipile documentation: GET /api/v1/users/invite/sent?account_id=...
+        endpoint = "/api/v1/users/invite/sent"
+        params = {'account_id': account_id}
+        return self._make_request("GET", endpoint, params=params)
+
+    def get_first_level_connections(self, account_id, cursor=None, limit=None):
+        """
+        Get first level connections for a LinkedIn account.
+        This is an alias for get_relations since LinkedIn relations are first-level connections.
+        
+        Args:
+            account_id: The LinkedIn account ID
+            cursor: Optional pagination cursor
+            limit: Optional page size (1..1000)
+            
+        Returns:
+            dict: { items: [...], cursor: "..." }
+        """
+        # Based on Unipile documentation: GET /api/v1/users/relations?account_id=...
+        # LinkedIn relations are equivalent to first-level connections
+        return self.get_relations(account_id, cursor=cursor, limit=limit)
+
+    def get_linkedin_profile(self, account_id, profile_id):
+        """
+        Get a LinkedIn profile by profile ID.
+        This is an alias for get_user_profile for consistency with existing code.
+        
+        Args:
+            account_id: The LinkedIn account ID
+            profile_id: The profile identifier (public_id or provider_id)
+            
+        Returns:
+            dict: User profile data
+        """
+        # Based on Unipile documentation: GET /api/v1/users/{identifier}?account_id=...
+        return self.get_user_profile(profile_id, account_id)
+
+    def get_conversation_id(self, account_id, attendee_provider_id):
+        """
+        Get conversation ID for a specific attendee.
+        This method finds a conversation that includes the given attendee.
+        
+        Args:
+            account_id: The LinkedIn account ID
+            attendee_provider_id: The attendee's provider ID
+            
+        Returns:
+            str: Conversation ID or None if not found
+        """
+        # Based on Unipile documentation: Use find_conversation_with_provider
+        return self.find_conversation_with_provider(account_id, attendee_provider_id)
 

@@ -97,38 +97,40 @@ def _check_single_account_relations(account_id, unipile):
 def _process_relation(relation, account_id):
     """Process a single relation."""
     try:
-        # Extract relation data
-        user_provider_id = relation.get('user_provider_id')
-        user_full_name = relation.get('user_full_name')
-        user_public_identifier = relation.get('user_public_identifier')
+        # Extract relation data using correct field names
+        member_id = relation.get('member_id')
+        public_identifier = relation.get('public_identifier')
+        first_name = relation.get('first_name')
+        last_name = relation.get('last_name')
+        full_name = f"{first_name} {last_name}".strip() if first_name and last_name else None
         
-        logger.info(f"Processing relation: provider_id={user_provider_id}, public_identifier={user_public_identifier}, name={user_full_name}")
+        logger.info(f"Processing relation: member_id={member_id}, public_identifier={public_identifier}, name={full_name}")
         
-        if not user_provider_id and not user_public_identifier:
-            logger.warning("Relation missing both user_provider_id and user_public_identifier")
+        if not member_id and not public_identifier:
+            logger.warning("Relation missing both member_id and public_identifier")
             return
         
-        # Find lead by provider_id or public_identifier
+        # Find lead by member_id (provider_id) or public_identifier
         lead = None
-        if user_provider_id:
-            lead = Lead.query.filter_by(provider_id=user_provider_id).first()
+        if member_id:
+            lead = Lead.query.filter_by(provider_id=member_id).first()
             if lead:
-                logger.info(f"Found lead by provider_id: {user_provider_id}")
+                logger.info(f"Found lead by member_id: {member_id}")
         
-        if not lead and user_public_identifier:
-            logger.info(f"Searching for lead by public_identifier: {user_public_identifier}")
-            lead = Lead.query.filter_by(public_identifier=user_public_identifier).first()
+        if not lead and public_identifier:
+            logger.info(f"Searching for lead by public_identifier: {public_identifier}")
+            lead = Lead.query.filter_by(public_identifier=public_identifier).first()
             if lead:
-                logger.info(f"Found lead by public_identifier: {user_public_identifier}")
+                logger.info(f"Found lead by public_identifier: {public_identifier}")
                 # Update the lead's provider_id for future matches
-                if not lead.provider_id and user_provider_id:
-                    lead.provider_id = user_provider_id
-                    logger.info(f"Updated lead {lead.id} provider_id to {user_provider_id}")
+                if not lead.provider_id and member_id:
+                    lead.provider_id = member_id
+                    logger.info(f"Updated lead {lead.id} provider_id to {member_id}")
             else:
-                logger.info(f"No lead found for public_identifier: {user_public_identifier}")
+                logger.info(f"No lead found for public_identifier: {public_identifier}")
         
         if not lead:
-            logger.info(f"No lead found for provider_id: {user_provider_id} or public_identifier: {user_public_identifier}")
+            logger.info(f"No lead found for member_id: {member_id} or public_identifier: {public_identifier}")
             return
         
         logger.info(f"Processing lead {lead.id} with status: {lead.status}")
@@ -145,9 +147,9 @@ def _process_relation(relation, account_id):
                 lead_id=lead.id,
                 meta_json={
                     'account_id': account_id,
-                    'user_provider_id': user_provider_id,
-                    'user_full_name': user_full_name,
-                    'user_public_identifier': user_public_identifier,
+                    'member_id': member_id,
+                    'full_name': full_name,
+                    'public_identifier': public_identifier,
                     'detection_method': 'periodic_check',
                     'relation_data': relation
                 }

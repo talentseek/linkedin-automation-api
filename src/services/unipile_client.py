@@ -50,12 +50,12 @@ class UnipileClient:
         # Try Flask config if available
         try:
             if current_app:
-                return current_app.config.get('UNIPILE_API_BASE_URL', 'https://api3.unipile.com:13359')
+                return current_app.config.get('UNIPILE_API_BASE_URL', 'https://api.unipile.com/v1')
         except RuntimeError:
             # No application context
             pass
         
-        return 'https://api3.unipile.com:13359'
+        return 'https://api.unipile.com/v1'
     
     def _make_request(self, method, endpoint, **kwargs):
         """Make a request to the Unipile API."""
@@ -64,17 +64,10 @@ class UnipileClient:
         
         url = f"{self.base_url}{endpoint}"
         
-        # Try different authentication methods for api3 endpoint
-        if 'api3.unipile.com' in self.base_url:
-            # For api3 endpoint, try Authorization header first
-            headers = {
-                'Authorization': f'Bearer {self.api_key}',
-            }
-        else:
-            # For regular api endpoint, use X-API-KEY
-            headers = {
-                'X-API-KEY': self.api_key,
-            }
+        # Base headers always include API key; Content-Type only when sending JSON
+        headers = {
+            'X-API-KEY': self.api_key,
+        }
         
         # Only set JSON content type if using JSON body; allow requests to set for form/multipart
         if 'json' in kwargs and kwargs['json'] is not None:
@@ -436,14 +429,14 @@ class UnipileClient:
         Returns:
             dict: { items: [...], cursor: "..." }
         """
-        # Based on Unipile documentation: client.users.getAllRelations()
-        endpoint = "/api/v1/users/relations"
-        params = {'account_id': account_id}
+        # Try different endpoint paths based on Unipile documentation
+        endpoint = "/api/v1/linkedin/accounts/{account_id}/relations"
+        params = {}
         if cursor:
             params['cursor'] = cursor
         if limit:
             params['limit'] = limit
-        return self._make_request("GET", endpoint, params=params)
+        return self._make_request("GET", endpoint.format(account_id=account_id), params=params)
 
     def get_sent_invitations(self, account_id):
         """

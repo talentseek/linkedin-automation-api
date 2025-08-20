@@ -326,23 +326,8 @@ def test_relation_processing():
             results['errors'].append(f"Get account details failed: {str(e)}")
             return jsonify(results), 500
 
-        # Step 2.7: Resync LinkedIn account data if status is null
-        if account_details.get('status') is None:
-            try:
-                resync_result = unipile.resync_linkedin_account(account_id)
-                results['steps'].append({
-                    'step': 'resync_linkedin_account',
-                    'status': 'success',
-                    'resync_result': resync_result
-                })
-            except Exception as e:
-                results['steps'].append({
-                    'step': 'resync_linkedin_account',
-                    'status': 'error',
-                    'error': str(e)
-                })
-                results['errors'].append(f"Resync failed: {str(e)}")
-                # Don't return here, continue with relations check
+        # Note: Account status is null, but according to Unipile docs, we can still retrieve data
+        # even when status is not OK (though it may not be up-to-date)
 
         # Step 3: Get relations
         try:

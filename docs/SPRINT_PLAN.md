@@ -20,36 +20,38 @@ Last Updated: 2025-08-20
 
 ---
 
-## Milestone 1 — Foundation Fixes (Webhooks, Connection Detection, Schema)
+## Milestone 1 — Foundation Fixes (Webhooks, Connection Detection, Schema) ✅ COMPLETE
 
-### Definition of Done
-1) Webhooks: receiving real events in production; events persisted; errors observable; replay/debug tools available.
-2) Connection Detection: leads move from invite_sent → connected based on relations or webhook events; no hard-coded polling on non-existent endpoints.
-3) Schema: verified columns, indexes, and migrations in place and reversible.
+### Definition of Done ✅ ACHIEVED
+1) ✅ Webhooks: receiving real events in production; events persisted; errors observable; replay/debug tools available.
+2) ✅ Connection Detection: leads move from invite_sent → connected based on relations or webhook events; no hard-coded polling on non-existent endpoints.
+3) ✅ Schema: verified columns, indexes, and migrations in place and reversible.
 
-### Tasks
-- [ ] [M1] Verify Unipile webhook registration (list and validate active webhooks)
-- [ ] [M1] Test webhook endpoints with real Unipile events (users + messaging sources)
-- [ ] [M1] Implement proper webhook signature verification (per Unipile guidance)
-- [ ] [M1] Add webhook health monitoring endpoint and metrics
-- [ ] [M1] Fix `handle_new_relation_webhook` for connection acceptance → updates lead + creates event
-- [ ] [M1] Fix `handle_message_received_webhook` for replies → creates/updates conversation + event
-- [ ] [M1] Add structured errors/logging in webhook handlers
-- [ ] [M1] Create webhook simulation + replay endpoints (dev-only)
-- [ ] [M1] Research correct Unipile endpoints for connections/relations (Users/Relations)
-- [ ] [M1] Implement connection detection via relations (paginated) instead of non-existent invitations endpoint
-- [ ] [M1] Add fallback: periodic relation backfill job + manual admin trigger
-- [ ] [M1] Create admin tools: manual status update to recover stuck leads (audited)
-- [ ] [M1] Add connection status monitoring/alerts (counts per day, acceptances)
-- [ ] [M1] Database schema audit: verify tables/columns, FKs, indexes, nullability
-- [ ] [M1] Create idempotent migrations and schema version tracking; add rollback scripts
-- [ ] [M1] Update OpenAPI (`/webhooks/*`, `/admin/*`) and add integration tests
+### Tasks ✅ ALL COMPLETED
+- [x] [M1] Verify Unipile webhook registration (list and validate active webhooks)
+- [x] [M1] Test webhook endpoints with real Unipile events (users + messaging sources)
+- [x] [M1] Implement proper webhook signature verification (per Unipile guidance)
+- [x] [M1] Add webhook health monitoring endpoint and metrics
+- [x] [M1] Fix `handle_new_relation_webhook` for connection acceptance → updates lead + creates event
+- [x] [M1] Fix `handle_message_received_webhook` for replies → creates/updates conversation + event
+- [x] [M1] Add structured errors/logging in webhook handlers
+- [x] [M1] Create webhook simulation + replay endpoints (dev-only)
+- [x] [M1] Research correct Unipile endpoints for connections/relations (Users/Relations)
+- [x] [M1] Implement connection detection via relations (paginated) instead of non-existent invitations endpoint
+- [x] [M1] Add fallback: periodic relation backfill job + manual admin trigger
+- [x] [M1] Create admin tools: manual status update to recover stuck leads (audited)
+- [x] [M1] Add connection status monitoring/alerts (counts per day, acceptances)
+- [x] [M1] Database schema audit: verify tables/columns, FKs, indexes, nullability
+- [x] [M1] Create idempotent migrations and schema version tracking; add rollback scripts
+- [x] [M1] Update OpenAPI (`/webhooks/*`, `/admin/*`) and add integration tests
+
+**Status**: ✅ COMPLETE - See `MILESTONE_1_COMPLETION_REPORT.md` for detailed documentation
 
 — Unipile references: Webhooks (events payloads), Users/Relations (acceptance detection), Auth headers.
 
 ---
 
-## Milestone 2 — Scheduler & Sequence Engine Overhaul
+## Milestone 2 — Scheduler & Sequence Engine Overhaul 🚀 IN PROGRESS
 
 ### Definition of Done
 1) Scheduler reliably advances leads across all steps honoring working hours, delays, and rate limits.
@@ -66,6 +68,8 @@ Last Updated: 2025-08-20
 - [ ] [M2] Rate limits: persist daily counts; admin visibility; auto-reset
 - [ ] [M2] Structured logging and metrics for each step execution
 - [ ] [M2] Update OpenAPI for scheduler/admin endpoints; add E2E tests
+
+**Status**: 🚀 STARTING - Foundation complete, ready to tackle scheduler logic
 
 — Unipile references: Messaging/Chats (send message; start chat vs send to chat), Users (profile IDs).
 

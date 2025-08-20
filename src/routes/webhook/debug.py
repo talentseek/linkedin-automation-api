@@ -698,6 +698,96 @@ def test_all_unipile_endpoints():
                 'error': str(e)
             }
         
+        # Test 9: Get first level connections (used in lead management)
+        try:
+            connections = unipile.get_first_level_connections(account_id=account_id)
+            results['get_first_level_connections'] = {
+                'status': 'success',
+                'data': {
+                    'connections_count': len(connections.get('items', []))
+                }
+            }
+        except Exception as e:
+            results['get_first_level_connections'] = {
+                'status': 'error',
+                'error': str(e)
+            }
+        
+        # Test 10: Get LinkedIn profile (used in lead management)
+        try:
+            # Test with a sample profile ID
+            test_profile_id = "chandan-jha-29882a222"
+            profile_data = unipile.get_linkedin_profile(account_id, test_profile_id)
+            results['get_linkedin_profile'] = {
+                'status': 'success',
+                'data': {
+                    'profile_name': f"{profile_data.get('first_name', '')} {profile_data.get('last_name', '')}".strip()
+                }
+            }
+        except Exception as e:
+            results['get_linkedin_profile'] = {
+                'status': 'error',
+                'error': str(e)
+            }
+        
+        # Test 11: Send connection request (critical for outreach)
+        try:
+            # Test with a sample profile ID - this will fail but we can see the error
+            test_profile_id = "test-profile-id"
+            result = unipile.send_connection_request(account_id, test_profile_id, "Test connection request")
+            results['send_connection_request'] = {
+                'status': 'success',
+                'data': {
+                    'request_id': result.get('id', 'unknown')
+                }
+            }
+        except Exception as e:
+            results['send_connection_request'] = {
+                'status': 'error',
+                'error': str(e)
+            }
+        
+        # Test 12: Send message (critical for messaging)
+        try:
+            # Test with sample data - this will fail but we can see the error
+            test_conversation_id = "test-conversation-id"
+            result = unipile.send_message(account_id, test_conversation_id, "Test message")
+            results['send_message'] = {
+                'status': 'success',
+                'data': {
+                    'message_id': result.get('id', 'unknown')
+                }
+            }
+        except Exception as e:
+            results['send_message'] = {
+                'status': 'error',
+                'error': str(e)
+            }
+        
+        # Test 13: Create webhook (used in webhook management)
+        try:
+            # Test webhook creation - this will create a test webhook
+            test_webhook_url = "https://example.com/test-webhook"
+            webhook = unipile.create_webhook(test_webhook_url, "users", "Test Webhook")
+            results['create_webhook'] = {
+                'status': 'success',
+                'data': {
+                    'webhook_id': webhook.get('id', 'unknown'),
+                    'webhook_name': webhook.get('name', 'unknown')
+                }
+            }
+            # Clean up the test webhook
+            if webhook.get('id'):
+                try:
+                    unipile.delete_webhook(webhook['id'])
+                except:
+                    pass  # Ignore cleanup errors
+        except Exception as e:
+            results['create_webhook'] = {
+                'status': 'error',
+                'error': str(e)
+            }
+        
         # Summary
         working_endpoints = [k for k, v in results.items() if v['status'] == 'success']
         broken_endpoints = [k for k, v in results.items() if v['status'] == 'error']

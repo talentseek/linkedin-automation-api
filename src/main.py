@@ -203,7 +203,8 @@ def create_app(config_name=None):
         """Health check endpoint for deployment monitoring."""
         try:
             # Basic health check - database connection
-            db.session.execute('SELECT 1')
+            from sqlalchemy import text
+            db.session.execute(text('SELECT 1'))
             return jsonify({
                 'status': 'healthy',
                 'timestamp': datetime.utcnow().isoformat(),

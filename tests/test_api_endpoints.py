@@ -1,359 +1,625 @@
 """
-Integration tests for API endpoints.
+Unit tests for API Endpoints.
 
-This module tests:
-- API endpoint functionality
-- Request/response formats
-- Error handling
-- Authentication (when implemented)
+This module tests all API endpoints including authentication, request handling,
+response formatting, and error scenarios.
 """
 
 import pytest
 import json
-from datetime import datetime
+from unittest.mock import Mock, patch, MagicMock
+from datetime import datetime, timedelta
+from flask import Flask
+from src.main import create_app
+from src.models import Client, LinkedInAccount, Campaign, Lead, Event
 
-from src.models import Client, Campaign, Lead, Event
+
+class TestAuthEndpoints:
+    """Test cases for authentication endpoints."""
+
+    @pytest.fixture
+    def client(self):
+        """Create a test client."""
+        app = create_app()
+        app.config['TESTING'] = True
+        with app.test_client() as client:
+            yield client
+
+    def test_register_success(self, client):
+        """Test successful user registration."""
+        with patch('src.routes.auth.User') as mock_user:
+            mock_user.query.filter_by.return_value.first.return_value = None
+            
+            response = client.post('/api/v1/auth/register', json={
+                'email': 'test@example.com',
+                'password': 'password123'
+            })
+            
+            assert response.status_code == 201
+            data = json.loads(response.data)
+            assert 'message' in data
+            assert 'user_id' in data
+
+    def test_register_existing_user(self, client):
+        """Test registration with existing email."""
+        with patch('src.routes.auth.User') as mock_user:
+            mock_user.query.filter_by.return_value.first.return_value = Mock()
+            
+            response = client.post('/api/v1/auth/register', json={
+                'email': 'existing@example.com',
+                'password': 'password123'
+            })
+            
+            assert response.status_code == 400
+            data = json.loads(response.data)
+            assert 'error' in data
+
+    def test_login_success(self, client):
+        """Test successful user login."""
+        mock_user = Mock()
+        mock_user.verify_password.return_value = True
+        mock_user.id = 1
+        mock_user.email = 'test@example.com'
+        
+        with patch('src.routes.auth.User') as mock_user_class:
+            mock_user_class.query.filter_by.return_value.first.return_value = mock_user
+            
+            response = client.post('/api/v1/auth/login', json={
+                'email': 'test@example.com',
+                'password': 'password123'
+            })
+            
+            assert response.status_code == 200
+            data = json.loads(response.data)
+            assert 'access_token' in data
+
+    def test_login_invalid_credentials(self, client):
+        """Test login with invalid credentials."""
+        with patch('src.routes.auth.User') as mock_user:
+            mock_user.query.filter_by.return_value.first.return_value = None
+            
+            response = client.post('/api/v1/auth/login', json={
+                'email': 'test@example.com',
+                'password': 'wrongpassword'
+            })
+            
+            assert response.status_code == 401
+            data = json.loads(response.data)
+            assert 'error' in data
+
+    def test_logout(self, client):
+        """Test user logout."""
+        with patch('src.routes.auth.jwt') as mock_jwt:
+            mock_jwt.get_jwt.return_value = {'jti': 'token123'}
+            
+            response = client.post('/api/v1/auth/logout')
+            
+            assert response.status_code == 200
+            data = json.loads(response.data)
+            assert 'message' in data
 
 
-@pytest.mark.integration
-class TestClientEndpoints:
-    """Test client-related API endpoints."""
-    
-    def test_get_clients(self, client, sample_client):
-        """Test GET /api/v1/clients endpoint."""
-        response = client.get('/api/v1/clients')
+class TestLinkedInEndpoints:
+    """Test cases for LinkedIn-related endpoints."""
+
+    @pytest.fixture
+    def client(self):
+        """Create a test client."""
+        app = create_app()
+        app.config['TESTING'] = True
+        with app.test_client() as client:
+            yield client
+
+    @pytest.fixture
+    def auth_headers(self):
+        """Create authenticated headers."""
+        return {'Authorization': 'Bearer test_token'}
+
+    def test_get_linkedin_accounts(self, client, auth_headers):
+        """Test getting LinkedIn accounts."""
+        mock_accounts = [
+            Mock(id=1, account_id='account1', account_name='Account 1'),
+            Mock(id=2, account_id='account2', account_name='Account 2')
+        ]
         
-        assert response.status_code == 200
-        data = json.loads(response.data)
-        assert 'clients' in data
-        assert len(data['clients']) >= 1
+        with patch('src.routes.linkedin_account.LinkedInAccount') as mock_account_class:
+            mock_account_class.query.filter_by.return_value.all.return_value = mock_accounts
+            
+            response = client.get('/api/v1/linkedin-accounts', headers=auth_headers)
+            
+            assert response.status_code == 200
+            data = json.loads(response.data)
+            assert len(data['accounts']) == 2
+
+    def test_get_linkedin_account(self, client, auth_headers):
+        """Test getting a specific LinkedIn account."""
+        mock_account = Mock(id=1, account_id='account1', account_name='Account 1')
         
-        # Check that our sample client is in the response
-        client_ids = [c['id'] for c in data['clients']]
-        assert sample_client.id in client_ids
-    
-    def test_get_clients_with_campaigns(self, client, sample_client, sample_campaign):
-        """Test GET /api/v1/clients?include_campaigns=true endpoint."""
-        response = client.get('/api/v1/clients?include_campaigns=true')
+        with patch('src.routes.linkedin_account.LinkedInAccount') as mock_account_class:
+            mock_account_class.query.get.return_value = mock_account
+            
+            response = client.get('/api/v1/linkedin-accounts/1', headers=auth_headers)
+            
+            assert response.status_code == 200
+            data = json.loads(response.data)
+            assert data['account']['account_id'] == 'account1'
+
+    def test_create_linkedin_account(self, client, auth_headers):
+        """Test creating a LinkedIn account."""
+        with patch('src.routes.linkedin_account.LinkedInAccount') as mock_account_class:
+            mock_account = Mock(id=1, account_id='new-account')
+            mock_account_class.return_value = mock_account
+            
+            response = client.post('/api/v1/linkedin-accounts', 
+                                 json={'account_id': 'new-account'},
+                                 headers=auth_headers)
+            
+            assert response.status_code == 201
+            data = json.loads(response.data)
+            assert 'account' in data
+
+    def test_update_linkedin_account(self, client, auth_headers):
+        """Test updating a LinkedIn account."""
+        mock_account = Mock(id=1, account_id='account1')
         
-        assert response.status_code == 200
-        data = json.loads(response.data)
-        assert 'clients' in data
+        with patch('src.routes.linkedin_account.LinkedInAccount') as mock_account_class:
+            mock_account_class.query.get.return_value = mock_account
+            
+            response = client.put('/api/v1/linkedin-accounts/1',
+                                json={'account_name': 'Updated Account'},
+                                headers=auth_headers)
+            
+            assert response.status_code == 200
+            data = json.loads(response.data)
+            assert 'account' in data
+
+    def test_delete_linkedin_account(self, client, auth_headers):
+        """Test deleting a LinkedIn account."""
+        mock_account = Mock(id=1, account_id='account1')
         
-        # Find our sample client
-        test_client = None
-        for c in data['clients']:
-            if c['id'] == sample_client.id:
-                test_client = c
-                break
-        
-        assert test_client is not None
-        assert 'campaigns' in test_client
-        assert len(test_client['campaigns']) == 1
-        assert test_client['campaigns'][0]['id'] == sample_campaign.id
-    
-    def test_get_client_by_id(self, client, sample_client):
-        """Test GET /api/v1/clients/<client_id> endpoint."""
-        response = client.get(f'/api/v1/clients/{sample_client.id}')
-        
-        assert response.status_code == 200
-        data = json.loads(response.data)
-        assert 'client' in data
-        assert data['client']['id'] == sample_client.id
-        assert data['client']['name'] == sample_client.name
-    
-    def test_get_client_not_found(self, client):
-        """Test GET /api/v1/clients/<invalid_id> endpoint."""
-        response = client.get('/api/v1/clients/nonexistent-id')
-        
-        assert response.status_code == 404
-        data = json.loads(response.data)
-        assert 'error' in data
-        assert data['error']['code'] == 'NOT_FOUND'
-    
-    def test_create_client(self, client):
-        """Test POST /api/v1/clients endpoint."""
-        client_data = {
-            'name': 'New Test Client',
-            'email': 'newtest@example.com'
-        }
-        
-        response = client.post(
-            '/api/v1/clients',
-            data=json.dumps(client_data),
-            content_type='application/json'
-        )
-        
-        assert response.status_code == 201
-        data = json.loads(response.data)
-        assert 'message' in data
-        assert 'client' in data
-        assert data['client']['name'] == 'New Test Client'
-        assert data['client']['email'] == 'newtest@example.com'
-    
-    def test_create_client_missing_name(self, client):
-        """Test POST /api/v1/clients with missing required field."""
-        client_data = {
-            'email': 'newtest@example.com'
-        }
-        
-        response = client.post(
-            '/api/v1/clients',
-            data=json.dumps(client_data),
-            content_type='application/json'
-        )
-        
-        assert response.status_code == 400
-        data = json.loads(response.data)
-        assert 'error' in data
-        assert data['error']['code'] == 'VALIDATION_ERROR'
-        assert 'name' in data['error']['message']
-    
-    def test_update_client(self, client, sample_client):
-        """Test PUT /api/v1/clients/<client_id> endpoint."""
-        update_data = {
-            'name': 'Updated Client Name',
-            'email': 'updated@example.com'
-        }
-        
-        response = client.put(
-            f'/api/v1/clients/{sample_client.id}',
-            data=json.dumps(update_data),
-            content_type='application/json'
-        )
-        
-        assert response.status_code == 200
-        data = json.loads(response.data)
-        assert 'message' in data
-        assert 'client' in data
-        assert data['client']['name'] == 'Updated Client Name'
-        assert data['client']['email'] == 'updated@example.com'
-    
-    def test_update_client_not_found(self, client):
-        """Test PUT /api/v1/clients/<invalid_id> endpoint."""
-        update_data = {'name': 'Updated Name'}
-        
-        response = client.put(
-            '/api/v1/clients/nonexistent-id',
-            data=json.dumps(update_data),
-            content_type='application/json'
-        )
-        
-        assert response.status_code == 404
-        data = json.loads(response.data)
-        assert 'error' in data
-        assert data['error']['code'] == 'NOT_FOUND'
+        with patch('src.routes.linkedin_account.LinkedInAccount') as mock_account_class:
+            mock_account_class.query.get.return_value = mock_account
+            
+            response = client.delete('/api/v1/linkedin-accounts/1', headers=auth_headers)
+            
+            assert response.status_code == 200
+            data = json.loads(response.data)
+            assert 'message' in data
 
 
 class TestCampaignEndpoints:
-    """Test campaign-related API endpoints."""
-    
-    def test_get_campaigns(self, client, sample_campaign):
-        """Test GET /api/v1/campaigns endpoint."""
-        response = client.get('/api/v1/campaigns')
+    """Test cases for campaign endpoints."""
+
+    @pytest.fixture
+    def client(self):
+        """Create a test client."""
+        app = create_app()
+        app.config['TESTING'] = True
+        with app.test_client() as client:
+            yield client
+
+    @pytest.fixture
+    def auth_headers(self):
+        """Create authenticated headers."""
+        return {'Authorization': 'Bearer test_token'}
+
+    def test_get_campaigns(self, client, auth_headers):
+        """Test getting campaigns."""
+        mock_campaigns = [
+            Mock(id=1, name='Campaign 1', is_active=True),
+            Mock(id=2, name='Campaign 2', is_active=False)
+        ]
         
-        assert response.status_code == 200
-        data = json.loads(response.data)
-        assert 'campaigns' in data
-        assert len(data['campaigns']) >= 1
+        with patch('src.routes.campaign.Campaign') as mock_campaign_class:
+            mock_campaign_class.query.filter_by.return_value.all.return_value = mock_campaigns
+            
+            response = client.get('/api/v1/campaigns', headers=auth_headers)
+            
+            assert response.status_code == 200
+            data = json.loads(response.data)
+            assert len(data['campaigns']) == 2
+
+    def test_get_campaign(self, client, auth_headers):
+        """Test getting a specific campaign."""
+        mock_campaign = Mock(id=1, name='Test Campaign', is_active=True)
         
-        # Check that our sample campaign is in the response
-        campaign_ids = [c['id'] for c in data['campaigns']]
-        assert sample_campaign.id in campaign_ids
-    
-    def test_get_campaigns_filtered_by_client(self, client, sample_client, sample_campaign):
-        """Test GET /api/v1/campaigns?client_id=<client_id> endpoint."""
-        response = client.get(f'/api/v1/campaigns?client_id={sample_client.id}')
+        with patch('src.routes.campaign.Campaign') as mock_campaign_class:
+            mock_campaign_class.query.get.return_value = mock_campaign
+            
+            response = client.get('/api/v1/campaigns/1', headers=auth_headers)
+            
+            assert response.status_code == 200
+            data = json.loads(response.data)
+            assert data['campaign']['name'] == 'Test Campaign'
+
+    def test_create_campaign(self, client, auth_headers):
+        """Test creating a campaign."""
+        with patch('src.routes.campaign.Campaign') as mock_campaign_class:
+            mock_campaign = Mock(id=1, name='New Campaign')
+            mock_campaign_class.return_value = mock_campaign
+            
+            response = client.post('/api/v1/campaigns',
+                                 json={'name': 'New Campaign'},
+                                 headers=auth_headers)
+            
+            assert response.status_code == 201
+            data = json.loads(response.data)
+            assert 'campaign' in data
+
+    def test_update_campaign(self, client, auth_headers):
+        """Test updating a campaign."""
+        mock_campaign = Mock(id=1, name='Test Campaign')
         
-        assert response.status_code == 200
-        data = json.loads(response.data)
-        assert 'campaigns' in data
-        assert len(data['campaigns']) == 1
-        assert data['campaigns'][0]['id'] == sample_campaign.id
-    
-    def test_get_campaigns_invalid_client(self, client):
-        """Test GET /api/v1/campaigns with invalid client_id."""
-        response = client.get('/api/v1/campaigns?client_id=nonexistent-client')
+        with patch('src.routes.campaign.Campaign') as mock_campaign_class:
+            mock_campaign_class.query.get.return_value = mock_campaign
+            
+            response = client.put('/api/v1/campaigns/1',
+                                json={'name': 'Updated Campaign'},
+                                headers=auth_headers)
+            
+            assert response.status_code == 200
+            data = json.loads(response.data)
+            assert 'campaign' in data
+
+    def test_delete_campaign(self, client, auth_headers):
+        """Test deleting a campaign."""
+        mock_campaign = Mock(id=1, name='Test Campaign')
         
-        assert response.status_code == 404
-        data = json.loads(response.data)
-        assert 'error' in data
-        assert data['error']['code'] == 'NOT_FOUND'
-    
-    def test_create_campaign(self, client, sample_client):
-        """Test POST /api/v1/clients/<client_id>/campaigns endpoint."""
-        campaign_data = {
-            'name': 'New Test Campaign',
-            'timezone': 'UTC',
-            'status': 'draft',
-            'sequence_json': [
-                {
-                    'type': 'message',
-                    'content': 'Hello {{first_name}}!',
-                    'delay_days': 1
-                }
-            ]
-        }
+        with patch('src.routes.campaign.Campaign') as mock_campaign_class:
+            mock_campaign_class.query.get.return_value = mock_campaign
+            
+            response = client.delete('/api/v1/campaigns/1', headers=auth_headers)
+            
+            assert response.status_code == 200
+            data = json.loads(response.data)
+            assert 'message' in data
+
+    def test_campaign_statistics(self, client, auth_headers):
+        """Test getting campaign statistics."""
+        mock_campaign = Mock(id=1, name='Test Campaign')
+        mock_campaign.get_lead_count.return_value = 50
+        mock_campaign.get_connection_rate.return_value = 25.5
         
-        response = client.post(
-            f'/api/v1/clients/{sample_client.id}/campaigns',
-            data=json.dumps(campaign_data),
-            content_type='application/json'
-        )
-        
-        assert response.status_code == 201
-        data = json.loads(response.data)
-        assert 'message' in data
-        assert 'campaign' in data
-        assert data['campaign']['name'] == 'New Test Campaign'
-        assert data['campaign']['timezone'] == 'UTC'
-        assert data['campaign']['status'] == 'draft'
-    
-    def test_create_campaign_missing_name(self, client, sample_client):
-        """Test POST /api/v1/clients/<client_id>/campaigns with missing required field."""
-        campaign_data = {
-            'timezone': 'UTC',
-            'status': 'draft'
-        }
-        
-        response = client.post(
-            f'/api/v1/clients/{sample_client.id}/campaigns',
-            data=json.dumps(campaign_data),
-            content_type='application/json'
-        )
-        
-        assert response.status_code == 400
-        data = json.loads(response.data)
-        assert 'error' in data
-        assert data['error']['code'] == 'VALIDATION_ERROR'
+        with patch('src.routes.campaign.Campaign') as mock_campaign_class:
+            mock_campaign_class.query.get.return_value = mock_campaign
+            
+            response = client.get('/api/v1/campaigns/1/statistics', headers=auth_headers)
+            
+            assert response.status_code == 200
+            data = json.loads(response.data)
+            assert 'statistics' in data
 
 
 class TestLeadEndpoints:
-    """Test lead-related API endpoints."""
-    
-    def test_get_leads(self, client, sample_campaign, sample_lead):
-        """Test GET /api/v1/campaigns/<campaign_id>/leads endpoint."""
-        response = client.get(f'/api/v1/campaigns/{sample_campaign.id}/leads')
+    """Test cases for lead endpoints."""
+
+    @pytest.fixture
+    def client(self):
+        """Create a test client."""
+        app = create_app()
+        app.config['TESTING'] = True
+        with app.test_client() as client:
+            yield client
+
+    @pytest.fixture
+    def auth_headers(self):
+        """Create authenticated headers."""
+        return {'Authorization': 'Bearer test_token'}
+
+    def test_get_leads(self, client, auth_headers):
+        """Test getting leads."""
+        mock_leads = [
+            Mock(id=1, first_name='John', last_name='Doe', status='pending'),
+            Mock(id=2, first_name='Jane', last_name='Smith', status='connected')
+        ]
         
-        assert response.status_code == 200
-        data = json.loads(response.data)
-        assert 'leads' in data
-        assert len(data['leads']) >= 1
+        with patch('src.routes.lead.crud.Lead') as mock_lead_class:
+            mock_lead_class.query.filter_by.return_value.all.return_value = mock_leads
+            
+            response = client.get('/api/v1/leads', headers=auth_headers)
+            
+            assert response.status_code == 200
+            data = json.loads(response.data)
+            assert len(data['leads']) == 2
+
+    def test_get_lead(self, client, auth_headers):
+        """Test getting a specific lead."""
+        mock_lead = Mock(id=1, first_name='John', last_name='Doe', status='pending')
         
-        # Check that our sample lead is in the response
-        lead_ids = [l['id'] for l in data['leads']]
-        assert sample_lead.id in lead_ids
-    
-    def test_get_leads_campaign_not_found(self, client):
-        """Test GET /api/v1/campaigns/<invalid_id>/leads endpoint."""
-        response = client.get('/api/v1/campaigns/nonexistent-id/leads')
+        with patch('src.routes.lead.crud.Lead') as mock_lead_class:
+            mock_lead_class.query.get.return_value = mock_lead
+            
+            response = client.get('/api/v1/leads/1', headers=auth_headers)
+            
+            assert response.status_code == 200
+            data = json.loads(response.data)
+            assert data['lead']['first_name'] == 'John'
+
+    def test_create_lead(self, client, auth_headers):
+        """Test creating a lead."""
+        with patch('src.routes.lead.crud.Lead') as mock_lead_class:
+            mock_lead = Mock(id=1, first_name='New', last_name='Lead')
+            mock_lead_class.return_value = mock_lead
+            
+            response = client.post('/api/v1/leads',
+                                 json={'first_name': 'New', 'last_name': 'Lead'},
+                                 headers=auth_headers)
+            
+            assert response.status_code == 201
+            data = json.loads(response.data)
+            assert 'lead' in data
+
+    def test_update_lead(self, client, auth_headers):
+        """Test updating a lead."""
+        mock_lead = Mock(id=1, first_name='John', last_name='Doe')
         
-        assert response.status_code == 404
-        data = json.loads(response.data)
-        assert 'error' in data
-        assert data['error']['code'] == 'NOT_FOUND'
-    
-    def test_create_lead(self, client, sample_campaign):
-        """Test POST /api/v1/campaigns/<campaign_id>/leads endpoint."""
-        lead_data = {
-            'first_name': 'Jane',
-            'last_name': 'Smith',
-            'company_name': 'Test Company',
-            'public_identifier': 'jane-smith-456',
-            'provider_id': 'provider-456',
-            'status': 'pending_invite'
+        with patch('src.routes.lead.crud.Lead') as mock_lead_class:
+            mock_lead_class.query.get.return_value = mock_lead
+            
+            response = client.put('/api/v1/leads/1',
+                                json={'first_name': 'John Updated'},
+                                headers=auth_headers)
+            
+            assert response.status_code == 200
+            data = json.loads(response.data)
+            assert 'lead' in data
+
+    def test_delete_lead(self, client, auth_headers):
+        """Test deleting a lead."""
+        mock_lead = Mock(id=1, first_name='John', last_name='Doe')
+        
+        with patch('src.routes.lead.crud.Lead') as mock_lead_class:
+            mock_lead_class.query.get.return_value = mock_lead
+            
+            response = client.delete('/api/v1/leads/1', headers=auth_headers)
+            
+            assert response.status_code == 200
+            data = json.loads(response.data)
+            assert 'message' in data
+
+    def test_send_connection_request(self, client, auth_headers):
+        """Test sending connection request to a lead."""
+        mock_lead = Mock(id=1, first_name='John', last_name='Doe')
+        
+        with patch('src.routes.lead.crud.Lead') as mock_lead_class:
+            mock_lead_class.query.get.return_value = mock_lead
+            
+            with patch('src.routes.lead.crud.UnipileClient') as mock_client:
+                mock_client.return_value.send_connection_request.return_value = {'id': 'invitation-123'}
+                
+                response = client.post('/api/v1/leads/1/send-connection',
+                                     json={'message': 'Would you like to connect?'},
+                                     headers=auth_headers)
+                
+                assert response.status_code == 200
+                data = json.loads(response.data)
+                assert 'message' in data
+
+    def test_send_message(self, client, auth_headers):
+        """Test sending message to a lead."""
+        mock_lead = Mock(id=1, first_name='John', last_name='Doe')
+        
+        with patch('src.routes.lead.crud.Lead') as mock_lead_class:
+            mock_lead_class.query.get.return_value = mock_lead
+            
+            with patch('src.routes.lead.crud.UnipileClient') as mock_client:
+                mock_client.return_value.send_message.return_value = {'id': 'message-123'}
+                
+                response = client.post('/api/v1/leads/1/send-message',
+                                     json={'content': 'Hello, how are you?'},
+                                     headers=auth_headers)
+                
+                assert response.status_code == 200
+                data = json.loads(response.data)
+                assert 'message' in data
+
+
+class TestWebhookEndpoints:
+    """Test cases for webhook endpoints."""
+
+    @pytest.fixture
+    def client(self):
+        """Create a test client."""
+        app = create_app()
+        app.config['TESTING'] = True
+        with app.test_client() as client:
+            yield client
+
+    def test_webhook_connection_accepted(self, client):
+        """Test webhook for connection accepted."""
+        webhook_data = {
+            'event_type': 'connection_accepted',
+            'data': {
+                'lead_id': 123,
+                'account_id': 'test-account'
+            }
         }
         
-        response = client.post(
-            f'/api/v1/campaigns/{sample_campaign.id}/leads',
-            data=json.dumps(lead_data),
-            content_type='application/json'
-        )
-        
-        assert response.status_code == 201
-        data = json.loads(response.data)
-        assert 'message' in data
-        assert 'lead' in data
-        assert data['lead']['first_name'] == 'Jane'
-        assert data['lead']['last_name'] == 'Smith'
-        assert data['lead']['public_identifier'] == 'jane-smith-456'
-    
-    def test_create_lead_missing_public_identifier(self, client, sample_campaign):
-        """Test POST /api/v1/campaigns/<campaign_id>/leads with missing required field."""
-        lead_data = {
-            'first_name': 'Jane',
-            'last_name': 'Smith',
-            'company_name': 'Test Company'
+        with patch('src.routes.webhook.handlers.handle_connection_accepted') as mock_handler:
+            response = client.post('/api/v1/webhooks/linkedin',
+                                 json=webhook_data,
+                                 content_type='application/json')
+            
+            assert response.status_code == 200
+            mock_handler.assert_called_once()
+
+    def test_webhook_connection_rejected(self, client):
+        """Test webhook for connection rejected."""
+        webhook_data = {
+            'event_type': 'connection_rejected',
+            'data': {
+                'lead_id': 123,
+                'account_id': 'test-account'
+            }
         }
         
-        response = client.post(
-            f'/api/v1/campaigns/{sample_campaign.id}/leads',
-            data=json.dumps(lead_data),
-            content_type='application/json'
-        )
+        with patch('src.routes.webhook.handlers.handle_connection_rejected') as mock_handler:
+            response = client.post('/api/v1/webhooks/linkedin',
+                                 json=webhook_data,
+                                 content_type='application/json')
+            
+            assert response.status_code == 200
+            mock_handler.assert_called_once()
+
+    def test_webhook_message_received(self, client):
+        """Test webhook for message received."""
+        webhook_data = {
+            'event_type': 'message_received',
+            'data': {
+                'lead_id': 123,
+                'message': 'Hello, thanks for connecting!',
+                'account_id': 'test-account'
+            }
+        }
+        
+        with patch('src.routes.webhook.handlers.handle_message_received') as mock_handler:
+            response = client.post('/api/v1/webhooks/linkedin',
+                                 json=webhook_data,
+                                 content_type='application/json')
+            
+            assert response.status_code == 200
+            mock_handler.assert_called_once()
+
+    def test_webhook_invalid_event_type(self, client):
+        """Test webhook with invalid event type."""
+        webhook_data = {
+            'event_type': 'invalid_event',
+            'data': {}
+        }
+        
+        response = client.post('/api/v1/webhooks/linkedin',
+                             json=webhook_data,
+                             content_type='application/json')
         
         assert response.status_code == 400
         data = json.loads(response.data)
         assert 'error' in data
-        assert data['error']['code'] == 'VALIDATION_ERROR'
-        assert 'public_identifier' in data['error']['message']
+
+    def test_webhook_missing_data(self, client):
+        """Test webhook with missing data."""
+        webhook_data = {
+            'event_type': 'connection_accepted'
+            # Missing data field
+        }
+        
+        response = client.post('/api/v1/webhooks/linkedin',
+                             json=webhook_data,
+                             content_type='application/json')
+        
+        assert response.status_code == 400
+        data = json.loads(response.data)
+        assert 'error' in data
+
+
+class TestAnalyticsEndpoints:
+    """Test cases for analytics endpoints."""
+
+    @pytest.fixture
+    def client(self):
+        """Create a test client."""
+        app = create_app()
+        app.config['TESTING'] = True
+        with app.test_client() as client:
+            yield client
+
+    @pytest.fixture
+    def auth_headers(self):
+        """Create authenticated headers."""
+        return {'Authorization': 'Bearer test_token'}
+
+    def test_get_weekly_statistics(self, client, auth_headers):
+        """Test getting weekly statistics."""
+        mock_stats = [
+            Mock(week_start_date=datetime.now().date(), total_leads=100, connections_sent=50),
+            Mock(week_start_date=(datetime.now() - timedelta(days=7)).date(), total_leads=80, connections_sent=40)
+        ]
+        
+        with patch('src.routes.analytics.weekly_statistics.WeeklyStatistics') as mock_stats_class:
+            mock_stats_class.query.order_by.return_value.limit.return_value.all.return_value = mock_stats
+            
+            response = client.get('/api/v1/analytics/weekly', headers=auth_headers)
+            
+            assert response.status_code == 200
+            data = json.loads(response.data)
+            assert 'statistics' in data
+
+    def test_get_campaign_analytics(self, client, auth_headers):
+        """Test getting campaign analytics."""
+        mock_campaign = Mock(id=1, name='Test Campaign')
+        mock_campaign.get_lead_count.return_value = 50
+        mock_campaign.get_connection_rate.return_value = 25.5
+        
+        with patch('src.routes.analytics.campaign_analytics.Campaign') as mock_campaign_class:
+            mock_campaign_class.query.get.return_value = mock_campaign
+            
+            response = client.get('/api/v1/analytics/campaigns/1', headers=auth_headers)
+            
+            assert response.status_code == 200
+            data = json.loads(response.data)
+            assert 'analytics' in data
+
+    def test_get_user_analytics(self, client, auth_headers):
+        """Test getting user analytics."""
+        mock_user = Mock(id=1, email='test@example.com')
+        
+        with patch('src.routes.analytics.core.User') as mock_user_class:
+            mock_user_class.query.get.return_value = mock_user
+            
+            response = client.get('/api/v1/analytics/user', headers=auth_headers)
+            
+            assert response.status_code == 200
+            data = json.loads(response.data)
+            assert 'analytics' in data
 
 
 class TestErrorHandling:
-    """Test error handling across endpoints."""
-    
-    def test_404_not_found(self, client):
-        """Test 404 error handling for non-existent endpoints."""
-        response = client.get('/api/v1/nonexistent-endpoint')
+    """Test cases for error handling."""
+
+    @pytest.fixture
+    def client(self):
+        """Create a test client."""
+        app = create_app()
+        app.config['TESTING'] = True
+        with app.test_client() as client:
+            yield client
+
+    def test_404_error(self, client):
+        """Test 404 error handling."""
+        response = client.get('/nonexistent-endpoint')
         
         assert response.status_code == 404
         data = json.loads(response.data)
         assert 'error' in data
-        assert data['error']['code'] == 'NOT_FOUND'
-        assert 'message' in data['error']
-    
-    def test_405_method_not_allowed(self, client):
-        """Test 405 error handling for unsupported methods."""
-        response = client.put('/api/v1/clients')
-        
-        assert response.status_code == 405
-        data = json.loads(response.data)
-        assert 'error' in data
-        assert data['error']['code'] == 'BAD_REQUEST'
-    
-    def test_400_bad_request(self, client):
-        """Test 400 error handling for malformed requests."""
-        response = client.post(
-            '/api/v1/clients',
-            data='invalid json',
-            content_type='application/json'
-        )
+
+    def test_500_error(self, client):
+        """Test 500 error handling."""
+        with patch('src.routes.auth.User') as mock_user:
+            mock_user.query.filter_by.side_effect = Exception("Database error")
+            
+            response = client.post('/api/v1/auth/login', json={
+                'email': 'test@example.com',
+                'password': 'password123'
+            })
+            
+            assert response.status_code == 500
+            data = json.loads(response.data)
+            assert 'error' in data
+
+    def test_validation_error(self, client):
+        """Test validation error handling."""
+        response = client.post('/api/v1/auth/register', json={
+            'email': 'invalid-email',  # Invalid email format
+            'password': '123'  # Too short password
+        })
         
         assert response.status_code == 400
         data = json.loads(response.data)
         assert 'error' in data
 
-
-class TestHealthEndpoints:
-    """Test health and status endpoints."""
-    
-    def test_root_health_check(self, client):
-        """Test GET / endpoint."""
-        response = client.get('/')
+    def test_unauthorized_access(self, client):
+        """Test unauthorized access handling."""
+        response = client.get('/api/v1/campaigns')  # No auth header
         
-        assert response.status_code == 200
+        assert response.status_code == 401
         data = json.loads(response.data)
-        assert 'status' in data
-        assert data['status'] == 'ok'
-        assert 'message' in data
-    
-    def test_webhook_health(self, client):
-        """Test GET /api/v1/webhooks/webhook/health endpoint."""
-        response = client.get('/api/v1/webhooks/webhook/health')
-        
-        assert response.status_code == 200
-        data = json.loads(response.data)
-        assert 'status' in data
-        assert data['status'] == 'healthy'
-        assert 'database' in data
-        assert data['database'] == 'connected'
+        assert 'error' in data

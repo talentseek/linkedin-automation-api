@@ -811,3 +811,86 @@ def test_all_unipile_endpoints():
 
 # Import the handler functions for testing
 from .handlers import handle_new_relation_webhook, handle_message_received_webhook
+
+
+@webhook_bp.route('/campaigns/<campaign_id>/error-analysis', methods=['GET'])
+def analyze_campaign_errors(campaign_id):
+    """Analyze error patterns for a specific campaign."""
+    try:
+        from src.models import Lead, Event
+        from sqlalchemy import func
+        
+        # Get all leads with error status
+        error_leads = Lead.query.filter_by(
+            campaign_id=campaign_id,
+            status='error'
+        ).all()
+        
+        error_analysis = {
+            'campaign_id': campaign_id,
+            'total_error_leads': len(error_leads),
+            'error_breakdown': {},
+            'recent_errors': [],
+            'common_patterns': {}
+        }
+        
+        # Analyze each error lead
+        for lead in error_leads:
+            # Get recent events for this lead
+            recent_events = Event.query.filter_by(lead_id=lead.id)\
+                .order_by(Event.timestamp.desc())\
+                .limit(5)\
+                .all()
+            
+            lead_error_info = {
+                'lead_id': lead.id,
+                'name': f"{lead.first_name} {lead.last_name}",
+                'company': lead.company_name,
+                'public_identifier': lead.public_identifier,
+                'current_step': lead.current_step,
+                'last_step_sent_at': lead.last_step_sent_at.isoformat() if lead.last_step_sent_at else None,
+                'recent_events': []
+            }
+            
+            for event in recent_events:
+                event_info = {
+                    'event_type': event.event_type,
+                    'timestamp': event.timestamp.isoformat(),
+                    'meta': event.meta_json
+                }
+                lead_error_info['recent_events'].append(event_info)
+                
+                # Track error patterns
+                if event.event_type in ['connection_request_failed', 'message_failed']:
+                    error_type = event.event_type
+                    if error_type not in error_analysis['error_breakdown']:
+                        error_analysis['error_breakdown'][error_type] = 0
+                    error_analysis['error_breakdown'][error_type] += 1
+                    
+                    # Extract error message from meta
+                    if event.meta_json and 'error' in event.meta_json:
+                        error_msg = event.meta_json['error']
+                        if 'Unable to resolve LinkedIn provider ID' in error_msg:
+                            if 'provider_id_resolution' not in error_analysis['common_patterns']:
+                                error_analysis['common_patterns']['provider_id_resolution'] = 0
+                            error_analysis['common_patterns']['provider_id_resolution'] += 1
+                        elif '422' in error_msg or 'duplicate' in error_msg.lower():
+                            if 'duplicate_invitation' not in error_analysis['common_patterns']:
+                                error_analysis['common_patterns']['duplicate_invitation'] = 0
+                            error_analysis['common_patterns']['duplicate_invitation'] += 1
+                        elif 'rate limit' in error_msg.lower():
+                            if 'rate_limit' not in error_analysis['common_patterns']:
+                                error_analysis['common_patterns']['rate_limit'] = 0
+                            error_analysis['common_patterns']['rate_limit'] += 1
+                        else:
+                            if 'other_errors' not in error_analysis['common_patterns']:
+                                error_analysis['common_patterns']['other_errors'] = []
+                            error_analysis['common_patterns']['other_errors'].append(error_msg[:100])
+            
+            error_analysis['recent_errors'].append(lead_error_info)
+        
+        return jsonify(error_analysis), 200
+        
+    except Exception as e:
+        logger.error(f"Error analyzing campaign errors: {str(e)}")
+        return jsonify({'error': str(e)}), 500

@@ -13,6 +13,7 @@ from flask import request, jsonify
 from src.models import db, Lead, LinkedInAccount, Event
 from src.services.unipile_client import UnipileClient
 from src.routes.webhook import webhook_bp
+from src.services.scheduler.connection_checker import _check_single_account_relations
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
@@ -67,6 +68,32 @@ def debug_relations():
         
     except Exception as e:
         logger.error(f"Error debugging relations: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@webhook_bp.route('/process-relations', methods=['POST'])
+def process_relations():
+    """Manually process relations for a LinkedIn account and update lead statuses.
+
+    Body: { "account_id": "<unipile_account_id>" }
+    """
+    try:
+        data = request.get_json()
+        if not data or 'account_id' not in data:
+            return jsonify({'error': 'Account ID is required'}), 400
+
+        account_id = data['account_id']
+
+        unipile = UnipileClient()
+        _check_single_account_relations(account_id, unipile)
+
+        return jsonify({
+            'message': 'Relation processing triggered',
+            'account_id': account_id
+        }), 200
+
+    except Exception as e:
+        logger.error(f"Error processing relations: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 

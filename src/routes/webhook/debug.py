@@ -106,14 +106,43 @@ def process_relations():
             logger.error(f"Error getting relations: {str(e)}")
             return jsonify({'error': f'Failed to get relations: {str(e)}'}), 500
         
-        # Call the relation processing function
+        # Call the relation processing function with timeout protection
         try:
             logger.info("About to call _check_single_account_relations")
-            # Add a simple test to see if the function is callable
             logger.info(f"Function is callable: {callable(_check_single_account_relations)}")
             
-            # Call the function and capture any return value
-            result = _check_single_account_relations(account_id, unipile)
+            # Add a simple timeout mechanism
+            import signal
+            import threading
+            
+            def timeout_handler():
+                logger.error("Relation processing timed out after 30 seconds")
+                return
+            
+            # Call the function with a timeout
+            result = None
+            error = None
+            
+            def process_relations():
+                nonlocal result, error
+                try:
+                    result = _check_single_account_relations(account_id, unipile)
+                except Exception as e:
+                    error = e
+            
+            thread = threading.Thread(target=process_relations)
+            thread.daemon = True
+            thread.start()
+            thread.join(timeout=30)  # 30 second timeout
+            
+            if thread.is_alive():
+                logger.error("Relation processing timed out")
+                return jsonify({'error': 'Relation processing timed out after 30 seconds'}), 500
+            
+            if error:
+                logger.error(f"Error in _check_single_account_relations: {str(error)}")
+                return jsonify({'error': f'Relation processing failed: {str(error)}'}), 500
+            
             logger.info(f"Function returned: {result}")
             logger.info(f"Relation processing completed for account: {account_id}")
         except Exception as e:

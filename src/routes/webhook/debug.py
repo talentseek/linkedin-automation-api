@@ -185,6 +185,55 @@ def debug_sent_invitations():
         return jsonify({'error': str(e)}), 500
 
 
+@webhook_bp.route('/test-single-relation', methods=['POST'])
+def test_single_relation():
+    """Test processing a single relation to isolate the hanging issue."""
+    try:
+        data = request.get_json()
+        if not data or 'account_id' not in data:
+            return jsonify({'error': 'Account ID is required'}), 400
+
+        account_id = data['account_id']
+        logger.info(f"Testing single relation processing for account: {account_id}")
+
+        # Get one relation from Unipile
+        unipile = UnipileClient()
+        relations = unipile.get_relations(account_id=account_id)
+        
+        if not relations or 'items' not in relations or not relations['items']:
+            return jsonify({'error': 'No relations found'}), 404
+        
+        # Take the first relation
+        relation = relations['items'][0]
+        logger.info(f"Testing with relation: {relation.get('public_identifier', 'unknown')}")
+        
+        # Import the function
+        from src.services.scheduler.connection_checker import _process_relation
+        
+        # Process the single relation
+        try:
+            logger.info("About to process single relation")
+            _process_relation(relation, account_id)
+            logger.info("Single relation processing completed successfully")
+            
+            return jsonify({
+                'message': 'Single relation processed successfully',
+                'relation': {
+                    'public_identifier': relation.get('public_identifier'),
+                    'member_id': relation.get('member_id'),
+                    'name': f"{relation.get('first_name', '')} {relation.get('last_name', '')}".strip()
+                }
+            }), 200
+            
+        except Exception as e:
+            logger.error(f"Error processing single relation: {str(e)}")
+            return jsonify({'error': f'Single relation processing failed: {str(e)}'}), 500
+
+    except Exception as e:
+        logger.error(f"Error in test_single_relation: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
 @webhook_bp.route('/unipile/test', methods=['POST'])
 def test_unipile_webhook():
     """Test endpoint for Unipile webhook processing."""

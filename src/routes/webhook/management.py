@@ -25,10 +25,22 @@ def list_webhooks():
         # Use Unipile API to list webhooks
         unipile = UnipileClient()
         webhooks = unipile.list_webhooks()
-        
+
+        # Normalize shape and compute total count
+        total = 0
+        if isinstance(webhooks, dict):
+            items = webhooks.get('webhooks', {}).get('items') if isinstance(webhooks.get('webhooks'), dict) else webhooks.get('items')
+            if isinstance(items, list):
+                total = len(items)
+        else:
+            try:
+                total = len(webhooks)
+            except Exception:
+                total = 0
+
         return jsonify({
             'webhooks': webhooks,
-            'total': len(webhooks)
+            'total': total
         }), 200
         
     except Exception as e:
@@ -117,7 +129,7 @@ def configure_unified_webhook():
         return jsonify({
             'message': 'Unified webhook configured successfully',
             'webhook': webhook,
-            'events': events
+            'events': messaging_events
         }), 200
         
     except Exception as e:

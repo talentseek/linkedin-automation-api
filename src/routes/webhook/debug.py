@@ -109,6 +109,8 @@ def process_relations():
         # Call the relation processing function
         try:
             logger.info("About to call _check_single_account_relations")
+            # Add a simple test to see if the function is callable
+            logger.info(f"Function is callable: {callable(_check_single_account_relations)}")
             _check_single_account_relations(account_id, unipile)
             logger.info(f"Relation processing completed for account: {account_id}")
         except Exception as e:

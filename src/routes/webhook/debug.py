@@ -559,5 +559,165 @@ def find_linkedin_accounts():
         }), 500
 
 
+@webhook_bp.route('/test-all-unipile-endpoints', methods=['POST'])
+def test_all_unipile_endpoints():
+    """Test all Unipile API endpoints to identify which ones are working and which need fixing."""
+    try:
+        data = request.get_json()
+        if not data or 'account_id' not in data:
+            return jsonify({'error': 'Account ID is required'}), 400
+        
+        account_id = data['account_id']
+        logger.info(f"Testing all Unipile endpoints for account: {account_id}")
+        
+        unipile = UnipileClient()
+        results = {}
+        
+        # Test 1: Get account details
+        try:
+            account_details = unipile.get_account(account_id)
+            results['get_account'] = {
+                'status': 'success',
+                'data': {
+                    'account_name': account_details.get('name'),
+                    'account_status': account_details.get('status'),
+                    'account_type': account_details.get('type')
+                }
+            }
+        except Exception as e:
+            results['get_account'] = {
+                'status': 'error',
+                'error': str(e)
+            }
+        
+        # Test 2: Get relations
+        try:
+            relations = unipile.get_relations(account_id=account_id)
+            results['get_relations'] = {
+                'status': 'success',
+                'data': {
+                    'relations_count': len(relations.get('items', [])),
+                    'has_cursor': 'cursor' in relations
+                }
+            }
+        except Exception as e:
+            results['get_relations'] = {
+                'status': 'error',
+                'error': str(e)
+            }
+        
+        # Test 3: Get sent invitations (this endpoint might not exist)
+        try:
+            invitations = unipile.get_sent_invitations(account_id)
+            results['get_sent_invitations'] = {
+                'status': 'success',
+                'data': {
+                    'invitations_count': len(invitations.get('items', []))
+                }
+            }
+        except Exception as e:
+            results['get_sent_invitations'] = {
+                'status': 'error',
+                'error': str(e)
+            }
+        
+        # Test 4: Get conversations
+        try:
+            conversations = unipile.get_conversations(account_id)
+            results['get_conversations'] = {
+                'status': 'success',
+                'data': {
+                    'conversations_count': len(conversations.get('items', []))
+                }
+            }
+        except Exception as e:
+            results['get_conversations'] = {
+                'status': 'error',
+                'error': str(e)
+            }
+        
+        # Test 5: Get messages
+        try:
+            messages = unipile.get_messages(account_id, limit=10)
+            results['get_messages'] = {
+                'status': 'success',
+                'data': {
+                    'messages_count': len(messages.get('items', []))
+                }
+            }
+        except Exception as e:
+            results['get_messages'] = {
+                'status': 'error',
+                'error': str(e)
+            }
+        
+        # Test 6: Get user profile (test with a known profile)
+        try:
+            # Test with a sample profile ID
+            test_profile_id = "chandan-jha-29882a222"
+            profile = unipile.get_user_profile(test_profile_id, account_id)
+            results['get_user_profile'] = {
+                'status': 'success',
+                'data': {
+                    'profile_name': f"{profile.get('first_name', '')} {profile.get('last_name', '')}".strip()
+                }
+            }
+        except Exception as e:
+            results['get_user_profile'] = {
+                'status': 'error',
+                'error': str(e)
+            }
+        
+        # Test 7: Get search parameters
+        try:
+            search_params = unipile.get_search_parameters(account_id, param_type='LOCATION', limit=5)
+            results['get_search_parameters'] = {
+                'status': 'success',
+                'data': {
+                    'parameters_count': len(search_params.get('items', []))
+                }
+            }
+        except Exception as e:
+            results['get_search_parameters'] = {
+                'status': 'error',
+                'error': str(e)
+            }
+        
+        # Test 8: List webhooks
+        try:
+            webhooks = unipile.list_webhooks()
+            results['list_webhooks'] = {
+                'status': 'success',
+                'data': {
+                    'webhooks_count': len(webhooks.get('items', []))
+                }
+            }
+        except Exception as e:
+            results['list_webhooks'] = {
+                'status': 'error',
+                'error': str(e)
+            }
+        
+        # Summary
+        working_endpoints = [k for k, v in results.items() if v['status'] == 'success']
+        broken_endpoints = [k for k, v in results.items() if v['status'] == 'error']
+        
+        return jsonify({
+            'account_id': account_id,
+            'summary': {
+                'total_endpoints_tested': len(results),
+                'working_endpoints': len(working_endpoints),
+                'broken_endpoints': len(broken_endpoints),
+                'working_endpoints_list': working_endpoints,
+                'broken_endpoints_list': broken_endpoints
+            },
+            'detailed_results': results
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error testing Unipile endpoints: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
 # Import the handler functions for testing
 from .handlers import handle_new_relation_webhook, handle_message_received_webhook

@@ -83,9 +83,14 @@ def process_relations():
             return jsonify({'error': 'Account ID is required'}), 400
 
         account_id = data['account_id']
+        logger.info(f"Starting relation processing for account: {account_id}")
 
         unipile = UnipileClient()
+        logger.info("UnipileClient created successfully")
+        
+        # Call the relation processing function
         _check_single_account_relations(account_id, unipile)
+        logger.info(f"Relation processing completed for account: {account_id}")
 
         return jsonify({
             'message': 'Relation processing triggered',

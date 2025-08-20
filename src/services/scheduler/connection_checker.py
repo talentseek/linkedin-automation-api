@@ -24,80 +24,80 @@ def _check_single_account_relations(account_id, unipile):
         logger.info(f"Fetching relations from Unipile for account {account_id}")
         relations_page = unipile.get_relations(account_id=account_id)
         logger.info(f"Successfully retrieved relations response")
-            logger.info(f"Retrieved relations for account {account_id}: {relations_page}")
-            
-            if not relations_page or not isinstance(relations_page, dict):
-                logger.error(f"Invalid relations response for account {account_id}: {relations_page}")
-                return
-            
-            # Parse relations - handle both response structures
-            relations_items = []
-            cursor = None
-            
-            if 'relations' in relations_page and 'items' in relations_page['relations']:
-                # Old structure: {"relations": {"items": [...], "cursor": "..."}}
-                relations_items = relations_page['relations']['items']
-                cursor = relations_page['relations'].get('cursor')
-            elif 'items' in relations_page:
-                # New structure: {"items": [...], "cursor": "..."}
-                relations_items = relations_page['items']
-                cursor = relations_page.get('cursor')
-            else:
-                logger.warning(f"Unexpected relations response structure for account {account_id}: {list(relations_page.keys())}")
-                return
-            
-            logger.info(f"Found {len(relations_items)} relations for account {account_id}")
-            
-            # Process each relation
-            for relation in relations_items:
-                try:
-                    _process_relation(relation, account_id)
-                except Exception as e:
-                    logger.error(f"Error processing relation {relation.get('member_id', 'unknown')}: {str(e)}")
-                    continue
-            
-            # Handle pagination if there's a cursor
-            page_count = 0
-            max_pages = 10  # Prevent infinite loops
-            
-            while cursor and page_count < max_pages:
-                try:
-                    page_count += 1
-                    logger.info(f"Fetching page {page_count} with cursor: {cursor}")
-                    relations_page = unipile.get_relations(account_id=account_id, cursor=cursor)
-                    
-                    if not relations_page or not isinstance(relations_page, dict):
-                        logger.error(f"Invalid paginated relations response: {relations_page}")
-                        break
-                    
-                    # Parse paginated response
-                    if 'relations' in relations_page and 'items' in relations_page['relations']:
-                        relations_items = relations_page['relations']['items']
-                        cursor = relations_page['relations'].get('cursor')
-                    elif 'items' in relations_page:
-                        relations_items = relations_page['items']
-                        cursor = relations_page.get('cursor')
-                    else:
-                        logger.warning(f"Unexpected paginated response structure: {list(relations_page.keys())}")
-                        break
-                    
-                    logger.info(f"Found {len(relations_items)} additional relations")
-                    
-                    # Process each relation from this page
-                    for relation in relations_items:
-                        try:
-                            _process_relation(relation, account_id)
-                        except Exception as e:
-                            logger.error(f"Error processing paginated relation {relation.get('member_id', 'unknown')}: {str(e)}")
-                            continue
-                            
-                except Exception as e:
-                    logger.error(f"Error fetching paginated relations: {str(e)}")
-                    break
-            
-            if page_count >= max_pages:
-                logger.warning(f"Reached maximum page limit ({max_pages}) for account {account_id}")
+        logger.info(f"Retrieved relations for account {account_id}: {relations_page}")
+        
+        if not relations_page or not isinstance(relations_page, dict):
+            logger.error(f"Invalid relations response for account {account_id}: {relations_page}")
+            return
+        
+        # Parse relations - handle both response structures
+        relations_items = []
+        cursor = None
+        
+        if 'relations' in relations_page and 'items' in relations_page['relations']:
+            # Old structure: {"relations": {"items": [...], "cursor": "..."}}
+            relations_items = relations_page['relations']['items']
+            cursor = relations_page['relations'].get('cursor')
+        elif 'items' in relations_page:
+            # New structure: {"items": [...], "cursor": "..."}
+            relations_items = relations_page['items']
+            cursor = relations_page.get('cursor')
+        else:
+            logger.warning(f"Unexpected relations response structure for account {account_id}: {list(relations_page.keys())}")
+            return
+        
+        logger.info(f"Found {len(relations_items)} relations for account {account_id}")
+        
+        # Process each relation
+        for relation in relations_items:
+            try:
+                _process_relation(relation, account_id)
+            except Exception as e:
+                logger.error(f"Error processing relation {relation.get('member_id', 'unknown')}: {str(e)}")
+                continue
+        
+        # Handle pagination if there's a cursor
+        page_count = 0
+        max_pages = 10  # Prevent infinite loops
+        
+        while cursor and page_count < max_pages:
+            try:
+                page_count += 1
+                logger.info(f"Fetching page {page_count} with cursor: {cursor}")
+                relations_page = unipile.get_relations(account_id=account_id, cursor=cursor)
                 
+                if not relations_page or not isinstance(relations_page, dict):
+                    logger.error(f"Invalid paginated relations response: {relations_page}")
+                    break
+                
+                # Parse paginated response
+                if 'relations' in relations_page and 'items' in relations_page['relations']:
+                    relations_items = relations_page['relations']['items']
+                    cursor = relations_page['relations'].get('cursor')
+                elif 'items' in relations_page:
+                    relations_items = relations_page['items']
+                    cursor = relations_page.get('cursor')
+                else:
+                    logger.warning(f"Unexpected paginated response structure: {list(relations_page.keys())}")
+                    break
+                
+                logger.info(f"Found {len(relations_items)} additional relations")
+                
+                # Process each relation from this page
+                for relation in relations_items:
+                    try:
+                        _process_relation(relation, account_id)
+                    except Exception as e:
+                        logger.error(f"Error processing paginated relation {relation.get('member_id', 'unknown')}: {str(e)}")
+                        continue
+                        
+            except Exception as e:
+                logger.error(f"Error fetching paginated relations: {str(e)}")
+                break
+        
+        if page_count >= max_pages:
+            logger.warning(f"Reached maximum page limit ({max_pages}) for account {account_id}")
+            
     except Exception as e:
         logger.error(f"Error checking relations for account {account_id}: {str(e)}")
         db.session.rollback()

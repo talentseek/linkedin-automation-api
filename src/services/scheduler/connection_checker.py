@@ -17,11 +17,10 @@ logger = logging.getLogger(__name__)
 
 def _check_single_account_relations(account_id, unipile):
     """Check relations for a single LinkedIn account."""
+    logger.info(f"Checking relations for account {account_id}")
+    
+    # Get relations from Unipile
     try:
-        logger.info(f"Checking relations for account {account_id}")
-        
-        # Get relations from Unipile
-        try:
             relations_page = unipile.get_relations(account_id=account_id)
             logger.info(f"Retrieved relations for account {account_id}: {relations_page}")
             
@@ -50,7 +49,7 @@ def _check_single_account_relations(account_id, unipile):
             # Process each relation
             for relation in relations_items:
                 try:
-                    self._process_relation(relation, account_id)
+                    _process_relation(relation, account_id)
                 except Exception as e:
                     logger.error(f"Error processing relation {relation.get('member_id', 'unknown')}: {str(e)}")
                     continue
@@ -81,7 +80,7 @@ def _check_single_account_relations(account_id, unipile):
                     # Process each relation from this page
                     for relation in relations_items:
                         try:
-                            self._process_relation(relation, account_id)
+                            _process_relation(relation, account_id)
                         except Exception as e:
                             logger.error(f"Error processing paginated relation {relation.get('member_id', 'unknown')}: {str(e)}")
                             continue
@@ -92,6 +91,7 @@ def _check_single_account_relations(account_id, unipile):
                 
     except Exception as e:
         logger.error(f"Error checking relations for account {account_id}: {str(e)}")
+        db.session.rollback()
 
 
 def _process_relation(relation, account_id):

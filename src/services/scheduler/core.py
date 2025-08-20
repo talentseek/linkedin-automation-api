@@ -224,6 +224,8 @@ class OutreachScheduler:
         
         while self.running:
             try:
+                logger.info("=== SCHEDULER ITERATION START ===")
+                
                 # Check if it's weekend (skip processing)
                 if self._is_weekend():
                     logger.info("Weekend detected - skipping processing")
@@ -231,16 +233,28 @@ class OutreachScheduler:
                     continue
                 
                 # Check and reset daily counters
-                self._check_and_reset_daily_counters()
+                try:
+                    self._check_and_reset_daily_counters()
+                except Exception as e:
+                    logger.error(f"Error in daily counter reset: {str(e)}")
                 
                 # Maybe check for new connections
-                self._maybe_check_for_new_connections()
+                try:
+                    self._maybe_check_for_new_connections()
+                except Exception as e:
+                    logger.error(f"Error in connection check: {str(e)}")
                 
                 # Maybe run nightly backfills
-                self._maybe_run_nightly_backfills()
+                try:
+                    self._maybe_run_nightly_backfills()
+                except Exception as e:
+                    logger.error(f"Error in nightly backfills: {str(e)}")
                 
                 # Process leads
-                self._process_leads()
+                try:
+                    self._process_leads()
+                except Exception as e:
+                    logger.error(f"Error in lead processing: {str(e)}")
                 
                 # Random delay between iterations
                 delay = random.randint(60, 300)  # 1-5 minutes
@@ -248,8 +262,12 @@ class OutreachScheduler:
                 time.sleep(delay)
                 
             except Exception as e:
-                logger.error(f"Error in scheduler processing loop: {str(e)}")
+                logger.error(f"Critical error in scheduler processing loop: {str(e)}")
+                logger.error(f"Error type: {type(e).__name__}")
+                import traceback
+                logger.error(f"Traceback: {traceback.format_exc()}")
                 time.sleep(60)  # Sleep for 1 minute on error
+                # Continue running - don't let errors stop the scheduler
         
         logger.info("Scheduler processing loop ended")
     

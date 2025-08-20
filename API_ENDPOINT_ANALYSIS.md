@@ -62,9 +62,8 @@
 - `POST /api/automation/scheduler/start` - Start scheduler
 - `POST /api/automation/scheduler/stop` - Stop scheduler
 
-#### **Webhook Endpoints (5 endpoints)**
-- `POST /api/webhooks/unipile/webhook` - Main Unipile webhook endpoint
-- `POST /api/webhooks/unipile/simple` - Simple webhook endpoint
+#### **Webhook Endpoints (4 endpoints)**
+- `POST /api/webhooks/unipile/simple` - Unified Unipile webhook endpoint
 - `GET /api/webhooks/webhook/health` - Webhook health check
 - `GET /api/webhooks/webhook/data` - Get webhook data
 - `GET /api/webhooks/status` - Get webhook status
@@ -136,7 +135,7 @@
 
 #### **Remove Unused Endpoints**
 - **User management**: `/api/users/*` endpoints (not currently used)
-- **Legacy webhooks**: `/api/webhooks/unipile/users` and `/api/webhooks/unipile/messaging` (redirect to main handler)
+- **Unified webhook**: `/api/webhooks/unipile/simple` handles all Unipile events
 
 #### **Standardize URL Patterns**
 - Some endpoints use `/clients/{id}/campaigns` while others use `/campaigns/{id}`

@@ -820,29 +820,10 @@ paths:
   # WEBHOOK ENDPOINTS
   # =============================================================================
   
-  /api/webhooks/unipile/webhook:
-    post:
-      summary: Main Unipile webhook endpoint
-      description: Primary webhook endpoint for all Unipile events
-      tags: [Webhooks]
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                event:
-                  type: string
-                  enum: [message_received, new_relation, message_read, account_status]
-      responses:
-        '200':
-          description: Webhook processed successfully
-
   /api/webhooks/unipile/simple:
     post:
-      summary: Simple webhook endpoint
-      description: Simplified webhook endpoint that captures all events and processes them
+      summary: Unipile webhook endpoint
+      description: Unified webhook endpoint for all Unipile events (users, messaging, etc.)
       tags: [Webhooks]
       requestBody:
         required: true

@@ -13,7 +13,7 @@ import hmac
 import json
 import logging
 from flask import request, jsonify, current_app
-from src.models import db, Lead, LinkedInAccount, Event
+from src.models import db, Lead, LinkedInAccount, Event, WebhookData
 from src.services.scheduler import get_outreach_scheduler
 from src.routes.webhook import webhook_bp
 from datetime import datetime
@@ -38,82 +38,7 @@ def verify_webhook_signature(payload_body, signature_header, secret):
         return False
 
 
-@webhook_bp.route('/unipile/webhook', methods=['POST'])
-def handle_unipile_webhook():
-    """Unified webhook handler for all Unipile events."""
-    try:
-        # Log webhook receipt with timestamp
-        logger.info("=" * 50)
-        logger.info(f"WEBHOOK RECEIVED AT: {datetime.utcnow().isoformat()}")
-        logger.info("=" * 50)
-        logger.info(f"Request Method: {request.method}")
-        logger.info(f"Request URL: {request.url}")
-        logger.info(f"Request Headers: {dict(request.headers)}")
-        logger.info(f"Content-Type: {request.content_type}")
-        logger.info(f"Content-Length: {request.content_length}")
-        
-        # Get payload
-        payload_body = request.get_data()
-        logger.info(f"Raw payload body length: {len(payload_body) if payload_body else 0}")
-        
-        try:
-            payload = request.get_json()
-            logger.info(f"Parsed JSON payload: {json.dumps(payload, indent=2)}")
-        except Exception as json_error:
-            logger.error(f"Failed to parse JSON: {str(json_error)}")
-            logger.error(f"Raw body: {payload_body}")
-            return jsonify({'error': 'Invalid JSON'}), 400
-        
-        if not payload:
-            logger.error("Empty webhook payload")
-            return jsonify({'error': 'Empty payload'}), 400
-        
-        # Basic signature verification (optional)
-        secret = current_app.config.get('UNIPILE_WEBHOOK_SECRET')
-        signature_header = request.headers.get('X-Unipile-Signature')
-        unipile_auth_header = request.headers.get('Unipile-Auth')
-        
-        # Since Pipedream works without auth headers, accept all webhooks for now
-        logger.info("Accepting webhook without signature verification for compatibility")
-        
-        # Optional: Log if we have signature headers for debugging
-        if signature_header:
-            logger.info("X-Unipile-Signature header present")
-        if unipile_auth_header:
-            logger.info("Unipile-Auth header present")
-        
-        # Route to appropriate handler based on event type
-        event_type = payload.get('type') or payload.get('event')
-        logger.info(f"EVENT TYPE DETECTED: {event_type}")
-        logger.info(f"Available payload keys: {list(payload.keys())}")
-        
-        if event_type == 'new_relation':
-            logger.info("Routing to new_relation handler")
-            return handle_new_relation_webhook(payload)
-        elif event_type == 'message_received':
-            logger.info("Routing to message_received handler")
-            return handle_message_received_webhook(payload)
-        elif event_type == 'message_read':
-            logger.info("Routing to message_read handler (treating as message_received)")
-            return handle_message_received_webhook(payload)
-        elif event_type == 'account_status':
-            logger.info("Routing to account_status handler")
-            return handle_account_status_webhook(payload)
-        else:
-            logger.info(f"Unhandled webhook event type: {event_type}")
-            logger.info(f"Full payload for unhandled event: {json.dumps(payload, indent=2)}")
-            return jsonify({'message': 'Event received but not processed'}), 200
-            
-    except Exception as e:
-        logger.error(f"Webhook processing error: {str(e)}")
-        logger.error(f"Exception details: {type(e).__name__}: {str(e)}")
-        import traceback
-        logger.error(f"Traceback: {traceback.format_exc()}")
-        return jsonify({'error': 'Internal error'}), 500
-    finally:
-        logger.info("=" * 50)
-        logger.info("WEBHOOK PROCESSING COMPLETE")
-        logger.info("=" * 50)
+
 
 
 def handle_new_relation_webhook(payload):

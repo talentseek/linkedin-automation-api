@@ -733,14 +733,10 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/WebhookHealthResponse' }
         '500': { $ref: '#/components/responses/ErrorResponse' }
-  /webhooks/unipile/users:
+  /webhooks/unipile/simple:
     post:
-      summary: Unipile users webhook
-      responses:
-        '200': { description: OK }
-  /webhooks/unipile/messaging:
-    post:
-      summary: Unipile messaging webhook
+      summary: Unipile simple webhook
+      description: Unified webhook endpoint for all Unipile events
       responses:
         '200': { description: OK }
   /webhooks/status:

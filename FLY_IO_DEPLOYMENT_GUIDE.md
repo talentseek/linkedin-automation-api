@@ -96,8 +96,7 @@ fly status --all
 If you're using Unipile webhooks, update your webhook URLs to point to your Fly.io deployment:
 
 ```
-https://linkedin-automation-api.fly.dev/api/webhooks/unipile/users
-https://linkedin-automation-api.fly.dev/api/webhooks/unipile/messaging
+https://linkedin-automation-api.fly.dev/api/webhooks/unipile/simple
 ```
 
 ## Step 5: Monitoring and Maintenance

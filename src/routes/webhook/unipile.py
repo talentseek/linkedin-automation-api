@@ -1,11 +1,7 @@
 """
-Unipile-specific webhook endpoints.
+Unipile simple webhook endpoint.
 
-This module contains endpoints for:
-- Unipile webhook management
-- Unipile user management
-- Unipile messaging
-- Simple webhook handling
+This module contains the unified webhook endpoint that handles all Unipile events.
 """
 
 import logging
@@ -54,63 +50,4 @@ def handle_unipile_simple():
         return jsonify({'error': str(e)}), 500
 
 
-@webhook_bp.route('/unipile/users', methods=['POST'])
-def handle_unipile_users():
-    """Handle Unipile user-related webhooks."""
-    try:
-        logger.info("Unipile users webhook received")
-        
-        payload = request.get_json()
-        if not payload:
-            return jsonify({'error': 'Empty payload'}), 400
-        
-        # Store webhook data
-        webhook_data = WebhookData(
-            event_type='users',
-            payload=payload,
-            headers=dict(request.headers),
-            processed=True
-        )
-        
-        db.session.add(webhook_data)
-        db.session.commit()
-        
-        logger.info(f"Users webhook processed and stored: {webhook_data.id}")
-        
-        return jsonify({'message': 'Users webhook processed'}), 200
-        
-    except Exception as e:
-        logger.error(f"Error processing users webhook: {str(e)}")
-        db.session.rollback()
-        return jsonify({'error': str(e)}), 500
 
-
-@webhook_bp.route('/unipile/messaging', methods=['POST'])
-def handle_unipile_messaging():
-    """Handle Unipile messaging-related webhooks."""
-    try:
-        logger.info("Unipile messaging webhook received")
-        
-        payload = request.get_json()
-        if not payload:
-            return jsonify({'error': 'Empty payload'}), 400
-        
-        # Store webhook data
-        webhook_data = WebhookData(
-            event_type='messaging',
-            payload=payload,
-            headers=dict(request.headers),
-            processed=True
-        )
-        
-        db.session.add(webhook_data)
-        db.session.commit()
-        
-        logger.info(f"Messaging webhook processed and stored: {webhook_data.id}")
-        
-        return jsonify({'message': 'Messaging webhook processed'}), 200
-        
-    except Exception as e:
-        logger.error(f"Error processing messaging webhook: {str(e)}")
-        db.session.rollback()
-        return jsonify({'error': str(e)}), 500

@@ -448,7 +448,8 @@ class UnipileClient:
         Returns:
             dict: Resync response
         """
-        endpoint = f"/api/v1/linkedin/accounts/{account_id}/resync"
+        # Based on Unipile documentation: resyncLinkedinAccount
+        endpoint = f"/api/v1/accounts/{account_id}/resync"
         return self._make_request("POST", endpoint)
 
     def get_sent_invitations(self, account_id):

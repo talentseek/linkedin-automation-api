@@ -754,11 +754,8 @@ Manually schedule the next step for a lead.
 
 ### Webhook Endpoints
 
-#### POST /webhooks/unipile/users
-Handle Unipile users webhook events (connection requests, profile views, etc.).
-
-#### POST /webhooks/unipile/messaging
-Handle Unipile messaging webhook events (messages received, etc.).
+#### POST /webhooks/unipile/simple
+Handle all Unipile webhook events (users, messaging, etc.) through unified endpoint.
 
 #### POST /webhooks/test
 Test endpoint for webhook development and debugging.

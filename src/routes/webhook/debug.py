@@ -255,6 +255,146 @@ def test_message_edited_webhook():
         return jsonify({'error': str(e)}), 500
 
 
+@webhook_bp.route('/test-relation-processing', methods=['POST'])
+def test_relation_processing():
+    """Test relation processing directly and return detailed results."""
+    try:
+        data = request.get_json()
+        if not data or 'account_id' not in data:
+            return jsonify({'error': 'Account ID is required'}), 400
+
+        account_id = data['account_id']
+        results = {
+            'account_id': account_id,
+            'timestamp': datetime.utcnow().isoformat(),
+            'steps': [],
+            'relations_found': 0,
+            'leads_processed': 0,
+            'leads_updated': 0,
+            'errors': []
+        }
+
+        # Step 1: Test function existence
+        try:
+            results['steps'].append({
+                'step': 'function_check',
+                'status': 'success',
+                'function_exists': _check_single_account_relations is not None,
+                'function_type': type(_check_single_account_relations).__name__
+            })
+        except Exception as e:
+            results['steps'].append({
+                'step': 'function_check',
+                'status': 'error',
+                'error': str(e)
+            })
+            results['errors'].append(f"Function check failed: {str(e)}")
+
+        # Step 2: Test Unipile client
+        try:
+            unipile = UnipileClient()
+            results['steps'].append({
+                'step': 'unipile_client',
+                'status': 'success',
+                'client_created': True
+            })
+        except Exception as e:
+            results['steps'].append({
+                'step': 'unipile_client',
+                'status': 'error',
+                'error': str(e)
+            })
+            results['errors'].append(f"Unipile client failed: {str(e)}")
+            return jsonify(results), 500
+
+        # Step 3: Get relations
+        try:
+            relations_response = unipile.get_relations(account_id=account_id)
+            if relations_response and isinstance(relations_response, dict):
+                relations_items = relations_response.get('relations', {}).get('items', [])
+                results['relations_found'] = len(relations_items)
+                results['steps'].append({
+                    'step': 'get_relations',
+                    'status': 'success',
+                    'relations_count': len(relations_items),
+                    'response_keys': list(relations_response.keys())
+                })
+            else:
+                results['steps'].append({
+                    'step': 'get_relations',
+                    'status': 'error',
+                    'error': 'Invalid response format',
+                    'response_type': type(relations_response).__name__
+                })
+                results['errors'].append("Invalid relations response format")
+                return jsonify(results), 500
+        except Exception as e:
+            results['steps'].append({
+                'step': 'get_relations',
+                'status': 'error',
+                'error': str(e)
+            })
+            results['errors'].append(f"Get relations failed: {str(e)}")
+            return jsonify(results), 500
+
+        # Step 4: Process each relation manually
+        if results['relations_found'] > 0:
+            relations_items = relations_response.get('relations', {}).get('items', [])
+            for i, relation in enumerate(relations_items[:5]):  # Limit to first 5 for testing
+                try:
+                    user_provider_id = relation.get('user_provider_id')
+                    user_public_identifier = relation.get('user_public_identifier')
+                    user_full_name = relation.get('user_full_name')
+                    
+                    # Find lead by public_identifier
+                    lead = None
+                    if user_public_identifier:
+                        lead = Lead.query.filter_by(public_identifier=user_public_identifier).first()
+                    
+                    relation_result = {
+                        'relation_index': i,
+                        'public_identifier': user_public_identifier,
+                        'provider_id': user_provider_id,
+                        'full_name': user_full_name,
+                        'lead_found': lead is not None,
+                        'lead_id': lead.id if lead else None,
+                        'lead_status': lead.status if lead else None
+                    }
+                    
+                    if lead and lead.status in ['invite_sent', 'invited']:
+                        relation_result['would_update'] = True
+                        relation_result['old_status'] = lead.status
+                        relation_result['new_status'] = 'connected'
+                    else:
+                        relation_result['would_update'] = False
+                    
+                    results['steps'].append({
+                        'step': f'process_relation_{i}',
+                        'status': 'success',
+                        'result': relation_result
+                    })
+                    
+                    results['leads_processed'] += 1
+                    if relation_result.get('would_update'):
+                        results['leads_updated'] += 1
+                        
+                except Exception as e:
+                    results['steps'].append({
+                        'step': f'process_relation_{i}',
+                        'status': 'error',
+                        'error': str(e)
+                    })
+                    results['errors'].append(f"Relation {i} processing failed: {str(e)}")
+
+        return jsonify(results), 200
+
+    except Exception as e:
+        return jsonify({
+            'error': str(e),
+            'timestamp': datetime.utcnow().isoformat()
+        }), 500
+
+
 @webhook_bp.route('/debug-test', methods=['GET'])
 def debug_test():
     """Simple debug endpoint to test if latest code is deployed."""

@@ -333,14 +333,23 @@ def test_relation_processing():
         try:
             relations_response = unipile.get_relations(account_id=account_id)
             if relations_response and isinstance(relations_response, dict):
-                relations_items = relations_response.get('relations', {}).get('items', [])
-                results['relations_found'] = len(relations_items)
+                # Try different response structures
+                relations_items = None
+                if 'relations' in relations_response and 'items' in relations_response['relations']:
+                    relations_items = relations_response['relations']['items']
+                elif 'items' in relations_response:
+                    relations_items = relations_response['items']
+                else:
+                    relations_items = []
+                
+                results['relations_found'] = len(relations_items) if relations_items else 0
                 results['steps'].append({
                     'step': 'get_relations',
                     'status': 'success',
-                    'relations_count': len(relations_items),
+                    'relations_count': len(relations_items) if relations_items else 0,
                     'response_keys': list(relations_response.keys()),
-                    'full_response': relations_response  # Add full response for debugging
+                    'full_response': relations_response,  # Add full response for debugging
+                    'parsed_items_count': len(relations_items) if relations_items else 0
                 })
             else:
                 results['steps'].append({

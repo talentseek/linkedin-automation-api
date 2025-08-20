@@ -41,8 +41,9 @@ def _check_single_account_relations(account_id, unipile):
                 logger.error(f"Error processing relation: {str(e)}")
                 continue
         
-        # Also check sent invitations
-        _check_sent_invitations(account_id, unipile)
+        # Temporarily disable invitation checking due to Unipile API endpoint issues
+        # TODO: Re-enable when Unipile provides proper invitations endpoint
+        # _check_sent_invitations(account_id, unipile)
         
     except Exception as e:
         logger.error(f"Error checking relations for account {account_id}: {str(e)}")

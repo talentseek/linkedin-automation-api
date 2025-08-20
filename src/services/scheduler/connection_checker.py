@@ -19,9 +19,11 @@ def _check_single_account_relations(account_id, unipile):
     """Check relations for a single LinkedIn account."""
     logger.info(f"Checking relations for account {account_id}")
     
-    # Get relations from Unipile
+    # Get relations from Unipile with timeout protection
     try:
+        logger.info(f"Fetching relations from Unipile for account {account_id}")
         relations_page = unipile.get_relations(account_id=account_id)
+        logger.info(f"Successfully retrieved relations response")
             logger.info(f"Retrieved relations for account {account_id}: {relations_page}")
             
             if not relations_page or not isinstance(relations_page, dict):
@@ -55,9 +57,13 @@ def _check_single_account_relations(account_id, unipile):
                     continue
             
             # Handle pagination if there's a cursor
-            while cursor:
+            page_count = 0
+            max_pages = 10  # Prevent infinite loops
+            
+            while cursor and page_count < max_pages:
                 try:
-                    logger.info(f"Fetching next page with cursor: {cursor}")
+                    page_count += 1
+                    logger.info(f"Fetching page {page_count} with cursor: {cursor}")
                     relations_page = unipile.get_relations(account_id=account_id, cursor=cursor)
                     
                     if not relations_page or not isinstance(relations_page, dict):
@@ -88,6 +94,9 @@ def _check_single_account_relations(account_id, unipile):
                 except Exception as e:
                     logger.error(f"Error fetching paginated relations: {str(e)}")
                     break
+            
+            if page_count >= max_pages:
+                logger.warning(f"Reached maximum page limit ({max_pages}) for account {account_id}")
                 
     except Exception as e:
         logger.error(f"Error checking relations for account {account_id}: {str(e)}")

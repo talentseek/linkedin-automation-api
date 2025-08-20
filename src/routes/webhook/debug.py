@@ -894,3 +894,91 @@ def analyze_campaign_errors(campaign_id):
     except Exception as e:
         logger.error(f"Error analyzing campaign errors: {str(e)}")
         return jsonify({'error': str(e)}), 500
+
+
+@webhook_bp.route('/campaigns/<campaign_id>/reset-error-leads', methods=['POST'])
+def reset_error_leads(campaign_id):
+    """Reset error status for leads that were stuck due to historical API issues."""
+    try:
+        from src.models import Lead, Event
+        from datetime import datetime, timedelta
+        
+        # Get all leads with error status
+        error_leads = Lead.query.filter_by(
+            campaign_id=campaign_id,
+            status='error'
+        ).all()
+        
+        reset_count = 0
+        reset_details = []
+        
+        for lead in error_leads:
+            # Check if this is a historical error (older than 1 day)
+            recent_error_events = Event.query.filter_by(
+                lead_id=lead.id,
+                event_type='connection_request_failed'
+            ).order_by(Event.timestamp.desc()).limit(1).all()
+            
+            should_reset = False
+            error_reason = "Unknown"
+            
+            if recent_error_events:
+                latest_error = recent_error_events[0]
+                # Check if error is older than 1 day
+                if latest_error.timestamp < datetime.utcnow() - timedelta(days=1):
+                    should_reset = True
+                    error_reason = "Historical API issue"
+                    
+                    # Check for specific error patterns
+                    if latest_error.meta_json and 'error' in latest_error.meta_json:
+                        error_msg = latest_error.meta_json['error']
+                        if 'unexpected keyword argument' in error_msg:
+                            error_reason = "Historical method signature issue"
+            
+            if should_reset:
+                # Reset to appropriate status based on current step
+                if lead.current_step == 0:
+                    lead.status = 'pending_invite'
+                elif lead.current_step > 0:
+                    lead.status = 'connected'  # Assume they got past the connection step
+                
+                # Create reset event
+                reset_event = Event(
+                    event_type='lead_status_reset',
+                    lead_id=lead.id,
+                    meta_json={
+                        'reason': error_reason,
+                        'old_status': 'error',
+                        'new_status': lead.status,
+                        'reset_timestamp': datetime.utcnow().isoformat()
+                    }
+                )
+                
+                db.session.add(reset_event)
+                reset_count += 1
+                
+                reset_details.append({
+                    'lead_id': lead.id,
+                    'name': f"{lead.first_name} {lead.last_name}",
+                    'company': lead.company_name,
+                    'old_status': 'error',
+                    'new_status': lead.status,
+                    'current_step': lead.current_step,
+                    'reason': error_reason
+                })
+        
+        if reset_count > 0:
+            db.session.commit()
+        
+        return jsonify({
+            'campaign_id': campaign_id,
+            'total_error_leads': len(error_leads),
+            'reset_count': reset_count,
+            'reset_details': reset_details,
+            'message': f'Reset {reset_count} leads from error status'
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error resetting error leads: {str(e)}")
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500

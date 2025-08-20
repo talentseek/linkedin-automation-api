@@ -40,9 +40,33 @@ def handle_unipile_simple():
         db.session.add(webhook_data)
         db.session.commit()
         
-        logger.info(f"Simple webhook processed and stored: {webhook_data.id}")
+        logger.info(f"Simple webhook stored: {webhook_data.id}")
         
-        return jsonify({'message': 'Simple webhook processed'}), 200
+        # Process the webhook event
+        event_type = payload.get('event') or payload.get('type')
+        logger.info(f"Processing event type: {event_type}")
+        
+        # Route to appropriate handler based on event type
+        if event_type == 'new_relation':
+            logger.info("Routing to new_relation handler")
+            from .handlers import handle_new_relation_webhook
+            return handle_new_relation_webhook(payload)
+        elif event_type == 'message_received':
+            logger.info("Routing to message_received handler")
+            from .handlers import handle_message_received_webhook
+            return handle_message_received_webhook(payload)
+        elif event_type == 'message_read':
+            logger.info("Routing to message_read handler (treating as message_received)")
+            from .handlers import handle_message_received_webhook
+            return handle_message_received_webhook(payload)
+        elif event_type == 'account_status':
+            logger.info("Routing to account_status handler")
+            from .handlers import handle_account_status_webhook
+            return handle_account_status_webhook(payload)
+        else:
+            logger.info(f"Unhandled webhook event type: {event_type}")
+            logger.info(f"Full payload for unhandled event: {json.dumps(payload, indent=2)}")
+            return jsonify({'message': 'Event received and stored but not processed'}), 200
         
     except Exception as e:
         logger.error(f"Error processing simple webhook: {str(e)}")

@@ -30,23 +30,21 @@ def handle_unipile_simple():
         if not payload:
             return jsonify({'error': 'Empty payload'}), 400
         
-        # Store webhook data - temporarily disabled for debugging
-        # webhook_data = WebhookData(
-        #     method=request.method,
-        #     url=request.url,
-        #     headers=json.dumps(dict(request.headers)),
-        #     raw_data=request.get_data(as_text=True),
-        #     json_data=json.dumps(payload),
-        #     content_type=request.content_type,
-        #     content_length=request.content_length
-        # )
-        # 
-        # db.session.add(webhook_data)
-        # db.session.commit()
+        # Store webhook data
+        webhook_data = WebhookData(
+            method=request.method,
+            url=request.url,
+            headers=json.dumps(dict(request.headers)),
+            raw_data=request.get_data(as_text=True),
+            json_data=json.dumps(payload),
+            content_type=request.content_type,
+            content_length=request.content_length
+        )
         
-        logger.info(f"Simple webhook received and processed (storage disabled)")
+        db.session.add(webhook_data)
+        db.session.commit()
         
-        logger.info(f"Simple webhook processed (storage disabled)")
+        logger.info(f"Simple webhook processed and stored: {webhook_data.id}")
         
         return jsonify({'message': 'Simple webhook processed'}), 200
         

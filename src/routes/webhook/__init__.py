@@ -16,7 +16,7 @@ webhook_bp = Blueprint('webhook', __name__)
 
 # Import all route modules to register them
 from . import handlers
-from . import unipile
+# from . import unipile  # Temporarily disabled for debugging
 from . import health
 from . import debug
 from . import management

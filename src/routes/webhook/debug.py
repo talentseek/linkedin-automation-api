@@ -111,7 +111,10 @@ def process_relations():
             logger.info("About to call _check_single_account_relations")
             # Add a simple test to see if the function is callable
             logger.info(f"Function is callable: {callable(_check_single_account_relations)}")
-            _check_single_account_relations(account_id, unipile)
+            
+            # Call the function and capture any return value
+            result = _check_single_account_relations(account_id, unipile)
+            logger.info(f"Function returned: {result}")
             logger.info(f"Relation processing completed for account: {account_id}")
         except Exception as e:
             logger.error(f"Error in _check_single_account_relations: {str(e)}")

@@ -88,9 +88,24 @@ def process_relations():
         unipile = UnipileClient()
         logger.info("UnipileClient created successfully")
         
+        # Test that we can get relations first
+        try:
+            relations = unipile.get_relations(account_id=account_id)
+            logger.info(f"Successfully got relations response: {type(relations)}")
+            if relations:
+                logger.info(f"Relations response keys: {list(relations.keys()) if isinstance(relations, dict) else 'not a dict'}")
+        except Exception as e:
+            logger.error(f"Error getting relations: {str(e)}")
+            return jsonify({'error': f'Failed to get relations: {str(e)}'}), 500
+        
         # Call the relation processing function
-        _check_single_account_relations(account_id, unipile)
-        logger.info(f"Relation processing completed for account: {account_id}")
+        try:
+            logger.info("About to call _check_single_account_relations")
+            _check_single_account_relations(account_id, unipile)
+            logger.info(f"Relation processing completed for account: {account_id}")
+        except Exception as e:
+            logger.error(f"Error in _check_single_account_relations: {str(e)}")
+            return jsonify({'error': f'Relation processing failed: {str(e)}'}), 500
 
         return jsonify({
             'message': 'Relation processing triggered',

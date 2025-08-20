@@ -16,57 +16,39 @@ logger = logging.getLogger(__name__)
 
 
 def _check_single_account_relations(account_id, unipile):
-    """Check relations for a single account and process new connections.
-
-    Unipile returns a paginated structure for relations, typically:
-      { "object": "RelationList", "items": [ ... ], "cursor": "..." }
-    This function aggregates all pages and processes relation items.
-    """
+    """Check relations for a single LinkedIn account."""
     try:
-        logger.info(f"Checking relations for account: {account_id}")
-
-        aggregated_relations = []
+        logger.info(f"Checking relations for account {account_id}")
+        
+        # Get relations from Unipile
+        relations_response = unipile.get_relations(account_id=account_id)
+        
+        if not relations_response:
+            logger.warning(f"No relations response for account {account_id}")
+            return
+        
+        # Updated logic for fetching all relations with pagination
+        all_relations = []
         cursor = None
-
         while True:
-            response = unipile.get_relations(account_id=account_id, cursor=cursor) if cursor else unipile.get_relations(account_id=account_id)
-
-            # Normalize response into a list of relation dicts
-            page_items = []
-            next_cursor = None
-
-            if isinstance(response, dict):
-                # Common shape: { items: [...], cursor: "..." }
-                items = response.get('items') or []
-                if isinstance(items, list):
-                    page_items = items
-                else:
-                    logger.warning(f"Unexpected 'items' type in relations response: {type(items)}")
-                next_cursor = response.get('cursor')
-            elif isinstance(response, list):
-                # Some environments might return a bare list
-                page_items = response
-            elif response is None:
-                page_items = []
-            else:
-                logger.warning(f"Unexpected relations response type: {type(response)}")
-
-            if not page_items and not aggregated_relations and not next_cursor:
-                logger.info(f"No relations found for account {account_id}")
+            relations_page = unipile.get_relations(account_id=account_id, cursor=cursor)
+            if not relations_page or not relations_page.get('relations', {}).get('items'):
                 break
-
-            aggregated_relations.extend(page_items)
-
-            if not next_cursor:
+            all_relations.extend(relations_page['relations']['items'])
+            cursor = relations_page['relations'].get('cursor')
+            if not cursor:
                 break
-
-            cursor = next_cursor
-
-        logger.info(f"Found {len(aggregated_relations)} relations for account {account_id}")
-
+        
+        if not all_relations:
+            logger.info(f"No relations found for account {account_id}")
+            return
+        
+        logger.info(f"Found {len(all_relations)} relations for account {account_id}")
+        
         # Process each relation
-        for relation in aggregated_relations:
+        for relation in all_relations:
             try:
+                # Check if relation is a dictionary
                 if not isinstance(relation, dict):
                     logger.warning(f"Invalid relation format (expected dict, got {type(relation)}): {relation}")
                     continue
@@ -74,11 +56,7 @@ def _check_single_account_relations(account_id, unipile):
             except Exception as e:
                 logger.error(f"Error processing relation: {str(e)}")
                 continue
-
-        # Temporarily disable invitation checking due to Unipile API endpoint issues
-        # TODO: Re-enable when Unipile provides proper invitations endpoint
-        # _check_sent_invitations(account_id, unipile)
-
+                
     except Exception as e:
         logger.error(f"Error checking relations for account {account_id}: {str(e)}")
 

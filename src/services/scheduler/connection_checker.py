@@ -69,6 +69,8 @@ def _process_relation(relation, account_id):
         user_full_name = relation.get('user_full_name')
         user_public_identifier = relation.get('user_public_identifier')
         
+        logger.info(f"Processing relation: provider_id={user_provider_id}, public_identifier={user_public_identifier}, name={user_full_name}")
+        
         if not user_provider_id and not user_public_identifier:
             logger.warning("Relation missing both user_provider_id and user_public_identifier")
             return
@@ -81,6 +83,7 @@ def _process_relation(relation, account_id):
                 logger.info(f"Found lead by provider_id: {user_provider_id}")
         
         if not lead and user_public_identifier:
+            logger.info(f"Searching for lead by public_identifier: {user_public_identifier}")
             lead = Lead.query.filter_by(public_identifier=user_public_identifier).first()
             if lead:
                 logger.info(f"Found lead by public_identifier: {user_public_identifier}")
@@ -88,10 +91,14 @@ def _process_relation(relation, account_id):
                 if not lead.provider_id and user_provider_id:
                     lead.provider_id = user_provider_id
                     logger.info(f"Updated lead {lead.id} provider_id to {user_provider_id}")
+            else:
+                logger.info(f"No lead found for public_identifier: {user_public_identifier}")
         
         if not lead:
             logger.info(f"No lead found for provider_id: {user_provider_id} or public_identifier: {user_public_identifier}")
             return
+        
+        logger.info(f"Processing lead {lead.id} with status: {lead.status}")
         
         # Update lead status if needed
         if lead.status in ['invite_sent', 'invited']:
@@ -117,6 +124,8 @@ def _process_relation(relation, account_id):
             db.session.commit()
             
             logger.info(f"Lead {lead.id} connected via periodic check: {old_status} -> connected")
+        else:
+            logger.info(f"Lead {lead.id} status is {lead.status}, not updating")
             
     except Exception as e:
         logger.error(f"Error processing relation: {str(e)}")

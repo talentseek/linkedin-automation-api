@@ -51,6 +51,11 @@ def _is_lead_ready_for_processing(self, lead):
             logger.info(f"Lead {lead.id} status '{lead.status}' not in processable statuses")
             return False
         
+        # CRITICAL FIX: Explicitly exclude error status leads to prevent spamming
+        if lead.status == 'error':
+            logger.warning(f"Lead {lead.id} is in ERROR status - skipping to prevent spamming")
+            return False
+        
         # Check if lead has completed all steps
         sequence = campaign.sequence_json
         if not sequence or not isinstance(sequence, list):

@@ -1081,3 +1081,70 @@ def fix_connection_status():
         logger.error(f"Error fixing connection status: {str(e)}")
         db.session.rollback()
         return jsonify({'error': str(e)}), 500
+
+
+@webhook_bp.route('/reset-leads-for-messaging', methods=['POST'])
+def reset_leads_for_messaging():
+    """Reset specific leads from error status to connected status so they can receive messages."""
+    try:
+        from src.models import Lead, Event
+        from datetime import datetime
+        
+        # Get the specific leads that need to be reset
+        lead_names = [
+            ("Asad", "Khan"),
+            ("Henry", "Allen"), 
+            ("Thi", "Luu")
+        ]
+        
+        reset_leads = []
+        
+        for first_name, last_name in lead_names:
+            lead = Lead.query.filter_by(
+                campaign_id="b86d3871-7eb9-449d-9c4f-154ae1c4262e",
+                first_name=first_name,
+                last_name=last_name
+            ).first()
+            
+            if lead and lead.status == 'error':
+                # Reset to connected status
+                old_status = lead.status
+                lead.status = 'connected'
+                lead.connected_at = datetime.utcnow()
+                
+                # Create a reset event
+                reset_event = Event(
+                    event_type='lead_status_reset_for_messaging',
+                    lead_id=lead.id,
+                    meta_json={
+                        'reason': 'Reset from error to connected to enable messaging',
+                        'old_status': old_status,
+                        'new_status': 'connected',
+                        'current_step': lead.current_step,
+                        'reset_timestamp': datetime.utcnow().isoformat()
+                    }
+                )
+                
+                db.session.add(reset_event)
+                reset_leads.append({
+                    'lead_id': lead.id,
+                    'name': f"{lead.first_name} {lead.last_name}",
+                    'company': lead.company_name,
+                    'old_status': old_status,
+                    'new_status': 'connected',
+                    'current_step': lead.current_step,
+                    'next_message_step': lead.current_step
+                })
+        
+        if reset_leads:
+            db.session.commit()
+        
+        return jsonify({
+            'message': f'Reset {len(reset_leads)} leads from error to connected status',
+            'reset_leads': reset_leads
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error resetting leads for messaging: {str(e)}")
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500

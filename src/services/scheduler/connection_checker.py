@@ -151,8 +151,9 @@ def _process_relation(relation, account_id):
         
         logger.info(f"Processing lead {lead.id} with status: {lead.status}")
         
-        # Update lead status if needed
-        if lead.status in ['invite_sent', 'invited']:
+        # Update lead status if they were previously invited (regardless of current status)
+        # This handles cases where leads are in 'error' status but actually accepted the connection
+        if lead.status in ['invite_sent', 'invited', 'error', 'pending_invite']:
             logger.info(f"Updating lead {lead.id} status from {lead.status} to connected")
             old_status = lead.status
             lead.status = 'connected'

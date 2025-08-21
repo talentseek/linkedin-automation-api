@@ -540,10 +540,10 @@ def find_linkedin_accounts():
         for account in accounts:
             results.append({
                 'id': account.id,
-                'name': account.name,
                 'account_id': account.account_id,
-                'provider_id': account.provider_id,
-                'created_at': account.created_at.isoformat() if account.created_at else None
+                'client_id': account.client_id,
+                'status': account.status,
+                'connected_at': account.connected_at.isoformat() if account.connected_at else None
             })
         
         return jsonify({
@@ -981,4 +981,41 @@ def reset_error_leads(campaign_id):
     except Exception as e:
         logger.error(f"Error resetting error leads: {str(e)}")
         db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+
+@webhook_bp.route('/fix-users-webhook', methods=['POST'])
+def fix_users_webhook():
+    """Fix the users webhook to point to the correct endpoint for new_relation events."""
+    try:
+        from src.services.unipile_client import UnipileClient
+        
+        # Create Unipile client
+        unipile = UnipileClient()
+        
+        # Delete any existing webhooks pointing to example.com
+        existing_webhooks = unipile.list_webhooks()
+        for webhook in existing_webhooks.get('webhooks', {}).get('items', []):
+            if webhook.get('request_url') == 'https://example.com/test-webhook':
+                logger.info(f"Deleting misconfigured webhook: {webhook.get('id')}")
+                unipile.delete_webhook(webhook.get('id'))
+        
+        # Create new webhook for users source with new_relation events
+        webhook_url = "https://linkedin-automation-api.fly.dev/api/v1/webhooks/unipile/simple"
+        webhook = unipile.create_webhook(
+            request_url=webhook_url,
+            webhook_type="users",
+            name="LinkedIn Connection Monitor",
+            events=["new_relation"]
+        )
+        
+        return jsonify({
+            'message': 'Users webhook fixed successfully',
+            'webhook': webhook,
+            'webhook_url': webhook_url,
+            'events': ["new_relation"]
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error fixing users webhook: {str(e)}")
         return jsonify({'error': str(e)}), 500

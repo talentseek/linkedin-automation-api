@@ -1019,3 +1019,65 @@ def fix_users_webhook():
     except Exception as e:
         logger.error(f"Error fixing users webhook: {str(e)}")
         return jsonify({'error': str(e)}), 500
+
+
+@webhook_bp.route('/fix-connection-status', methods=['POST'])
+def fix_connection_status():
+    """Fix leads that have connection_accepted events but are still in error status."""
+    try:
+        from src.models import Lead, Event
+        from datetime import datetime
+        
+        # Find leads that have connection_accepted events but are in error status
+        error_leads = Lead.query.filter_by(status='error').all()
+        
+        fixed_leads = []
+        
+        for lead in error_leads:
+            # Check if this lead has a connection_accepted event
+            connection_event = Event.query.filter_by(
+                lead_id=lead.id,
+                event_type='connection_accepted'
+            ).first()
+            
+            if connection_event:
+                # Update lead status to connected
+                old_status = lead.status
+                lead.status = 'connected'
+                lead.connected_at = datetime.utcnow()
+                
+                # Create a fix event
+                fix_event = Event(
+                    event_type='lead_status_fixed',
+                    lead_id=lead.id,
+                    meta_json={
+                        'reason': 'Manual fix for connection detection issue',
+                        'old_status': old_status,
+                        'new_status': 'connected',
+                        'connection_event_id': connection_event.id,
+                        'fix_timestamp': datetime.utcnow().isoformat()
+                    }
+                )
+                
+                db.session.add(fix_event)
+                fixed_leads.append({
+                    'lead_id': lead.id,
+                    'name': f"{lead.first_name} {lead.last_name}",
+                    'company': lead.company_name,
+                    'old_status': old_status,
+                    'new_status': 'connected',
+                    'connection_event_timestamp': connection_event.timestamp.isoformat()
+                })
+        
+        if fixed_leads:
+            db.session.commit()
+        
+        return jsonify({
+            'message': f'Fixed {len(fixed_leads)} leads with connection_accepted events',
+            'fixed_leads': fixed_leads
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error fixing connection status: {str(e)}")
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500

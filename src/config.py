@@ -37,6 +37,9 @@ class Config:
     RESEND_API_KEY = os.environ.get('RESEND_API_KEY')
     NOTIFY_EMAIL_TO = os.environ.get('NOTIFY_EMAIL_TO')  # comma-separated
     NOTIFY_EMAIL_FROM = os.environ.get('NOTIFY_EMAIL_FROM', 'notifications@localhost')
+    
+    # Scheduler configuration
+    START_SCHEDULER = os.environ.get('START_SCHEDULER', 'true').lower() == 'true'
 
 
 class DevelopmentConfig(Config):

@@ -1148,3 +1148,76 @@ def reset_leads_for_messaging():
         logger.error(f"Error resetting leads for messaging: {str(e)}")
         db.session.rollback()
         return jsonify({'error': str(e)}), 500
+
+
+@webhook_bp.route('/reset-new-connections-to-step1', methods=['POST'])
+def reset_new_connections_to_step1():
+    """Reset newly connected leads to step 1 (first message) regardless of their current step."""
+    try:
+        from src.models import Lead, Event
+        from datetime import datetime
+        
+        # Get the specific leads that need to be reset
+        lead_names = [
+            ("Asad", "Khan"),
+            ("Henry", "Allen"), 
+            ("Thi", "Luu")
+        ]
+        
+        reset_leads = []
+        
+        for first_name, last_name in lead_names:
+            lead = Lead.query.filter_by(
+                campaign_id="b86d3871-7eb9-449d-9c4f-154ae1c4262e",
+                first_name=first_name,
+                last_name=last_name
+            ).first()
+            
+            if lead:
+                # Reset to connected status and step 1 (first message after connection)
+                old_status = lead.status
+                old_step = lead.current_step
+                
+                lead.status = 'connected'
+                lead.current_step = 1  # First message after connection
+                lead.connected_at = datetime.utcnow()
+                lead.last_step_sent_at = None  # Reset so they can be processed immediately
+                
+                # Create a reset event
+                reset_event = Event(
+                    event_type='lead_reset_to_step1',
+                    lead_id=lead.id,
+                    meta_json={
+                        'reason': 'Reset newly connected lead to step 1 (first message)',
+                        'old_status': old_status,
+                        'new_status': 'connected',
+                        'old_step': old_step,
+                        'new_step': 1,
+                        'reset_timestamp': datetime.utcnow().isoformat()
+                    }
+                )
+                
+                db.session.add(reset_event)
+                reset_leads.append({
+                    'lead_id': lead.id,
+                    'name': f"{lead.first_name} {lead.last_name}",
+                    'company': lead.company_name,
+                    'old_status': old_status,
+                    'new_status': 'connected',
+                    'old_step': old_step,
+                    'new_step': 1,
+                    'next_action': 'Send first message after connection'
+                })
+        
+        if reset_leads:
+            db.session.commit()
+        
+        return jsonify({
+            'message': f'Reset {len(reset_leads)} newly connected leads to step 1',
+            'reset_leads': reset_leads
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error resetting leads to step 1: {str(e)}")
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
